@@ -1,6 +1,6 @@
 ---
 name: sillytavern-card-generator
-description: 引導使用者以「對話式檢核進度」的方式，從一段簡短的世界觀與角色背景開始，逐步共同打造一張完整的 SillyTavern（酒館）角色卡 —— 涵蓋世界觀發想、依酒館觸發機制設計的世界書（World Info/Lorebook）、上下狀態欄卡片與小遊戲/觸發事件的正規表達式（regex）美化、MVU 風格動態變量卡評估與設計、以及繁體中文文風與用詞校正。只要使用者提到「酒館卡」「SillyTavern」「角色卡」「人物卡」「世界書」「Lorebook」「狀態欄」「資訊卡美化」「正規表達式美化」「MVU」「變量卡」「小遊戲觸發」，或是貼上/描述一段角色世界觀＋背景想請你「幫忙寫成卡」「擴寫成人設」，都必須主動使用本技能 —— 即使使用者沒有明講要用這個技能、也沒有一次把所有規格講清楚。本技能的核心價值在於「不要一次生完整張卡」，而是用檢核表跟使用者來回確認，逐步收斂需求後才動筆。
+description: 引導使用者以「對話式檢核進度」的方式，從一段簡短的世界觀與角色背景開始，逐步共同打造一張完整的 SillyTavern（酒館）角色卡 —— 涵蓋世界觀發想、依酒館觸發機制設計的世界書（World Info/Lorebook）、上下狀態欄卡片與小遊戲/觸發事件的正規表達式（regex）美化、MVU 風格動態變量卡評估與設計、繁體中文文風與用詞校正，以及卡片組裝完成後用腳本精確模擬「一般玩家玩 N 頁下來」的試玩實測（世界書觸發、regex 渲染、變量推進全部實際跑一遍，而非憑感覺猜測）。只要使用者提到「酒館卡」「SillyTavern」「角色卡」「人物卡」「世界書」「Lorebook」「狀態欄」「資訊卡美化」「正規表達式美化」「MVU」「變量卡」「小遊戲觸發」「試玩」「跑劇情模擬」「實測角色卡」，或是貼上/描述一段角色世界觀＋背景想請你「幫忙寫成卡」「擴寫成人設」「看看這張卡實際玩起來怎樣」，都必須主動使用本技能 —— 即使使用者沒有明講要用這個技能、也沒有一次把所有規格講清楚。本技能的核心價值在於「不要一次生完整張卡」，而是用檢核表跟使用者來回確認，逐步收斂需求後才動筆，並且能在卡片做完後實際跑給使用者看。
 ---
 
 # SillyTavern 角色卡生成器
@@ -95,6 +95,10 @@ description: 引導使用者以「對話式檢核進度」的方式，從一段�
 
 依 `references/card-format.md` 把以上所有內容組裝成完整的 `chara_card_v3` JSON，可以 `assets/character_card_template.json` 當骨架。輸出前跟使用者複述一次完整卡片的結構摘要（不是貼整份 JSON 洗版，而是條列各欄位重點），確認無誤後再輸出檔案，並用 SendUserFile 之類的方式把 `.json` 檔案交給使用者（若目前工具環境支援）。
 
+### Stage 8 · 試玩模擬（Playtest Dry-Run，選用）
+
+卡片組裝完成後，如果使用者想看「用一般玩家的節奏玩下去實際會長怎樣」（而不是要一路演到劇情結束），依 `references/playtest-guide.md` 執行：跟使用者確認輪數（預設 20 頁）與玩家人設，然後逐輪用 `scripts/playtest_engine.py` 的 `context`／`commit` 指令，讓世界書觸發、regex 渲染、變量更新都用腳本精確計算，你只負責生成玩家與角色雙方的實際文字內容。跑完後把渲染出的 `transcript.html` 發布成 Artifact（記得先照流程載入 `artifact-design` skill）或用 SendUserFile 交給使用者，並附上一段老實的 QA 觀察摘要（世界書有沒有該觸發沒觸發、變量節奏順不順、regex 有沒有警告、文風有沒有跑掉）。這一步的價值在於誠實暴露卡片的問題，不是產出一份漂亮的展示稿。
+
 ## 参考資料索引
 
 | 檔案 | 何時查閱 |
@@ -107,6 +111,8 @@ description: 引導使用者以「對話式檢核進度」的方式，從一段�
 | `references/card-format.md` | Stage 7，`chara_card_v3` 完整欄位規格、`character_book`/`regex_scripts` 精確 schema |
 | `assets/character_card_template.json` | Stage 7，可直接複製填寫的卡片骨架 |
 | `assets/regex_snippets.md` | Stage 5，可直接套用/修改的 regex 範本（狀態欄、資訊卡等） |
+| `references/playtest-guide.md` | Stage 8，試玩模擬的執行流程與 QA 檢查點 |
+| `scripts/playtest_engine.py` | Stage 8，計算世界書觸發／套用 regex／套用變量更新的 CLI 工具，`--help` 看用法 |
 
 ## 注意事項
 
