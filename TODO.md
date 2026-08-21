@@ -28,10 +28,12 @@
 
 ## 其他未完成項目
 
-- Stage 6：文風與用詞校對（尚未執行）
+- Stage 6：文風與用詞校對（system_prompt 與世界書已初步自查，待全卡完成後再總校）
 - Stage 7：組裝完整 chara_card_v3 JSON
-  - 五個開局 + 自訂欄位機制
-  - 世界書全部條目（含三條系統性 MVU 條目）
+  - ✅ system_prompt（card_build/system_prompt.md）
+  - ✅ 世界書 15 條內容（card_build/worldbook.md）
+  - ⬜ 五個開局正文 + 自訂欄位機制
+  - ⬜ description / personality / scenario / mes_example
   - regex 腳本打包（頭卡／正文／花冠／三條尾卡／兩條小遊戲）
 - 阿霆與 Lia 是否比照馬提亞斯擴充為六階段心境（目前僅馬提亞斯完成）
 - Stage 8：試玩模擬 20 頁
