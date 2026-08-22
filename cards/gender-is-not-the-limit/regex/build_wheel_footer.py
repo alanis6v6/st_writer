@@ -1,0 +1,392 @@
+# -*- coding: utf-8 -*-
+"""
+Build the production regex_scripts for the switchable wheel + footer.
+
+Design (see conversation for full rationale):
+- RT_頭卡: unchanged head-card render, PLUS emits 3 hidden "who is focus" markers
+  (rt-fm-m / rt-fm-t / rt-fm-l) so later scripts can default the avatar switch
+  to whoever is narratively focused this turn, purely via string matching on
+  the FOCUS field (no numeric logic needed here).
+- RT_正文: unchanged.
+- RT_花冠尾卡 (NEW, replaces RT_花冠轉盤 + RT_尾卡): one combined script that
+  spans [WHEEL]...[/WHEEL] through [FOOT]...[/FOOT] (they're adjacent in the
+  output format, so this is a safe non-greedy span - it never touches BODY).
+  It renders:
+    * 3 wheel-sections (Matthias / Ating / Lia), each showing ALL its own
+      current-phase text statically per character (no per-turn LLM writing
+      needed for the two non-focus characters) - which band is "current" is
+      computed purely from the M/T/L numbers via regex numeric-range
+      alternation (no arithmetic, just digit-pattern matching), using an
+      "empty vs non-empty capture group" + CSS `:not(:empty)` sibling trick
+      since replaceString can't conditionally emit literal text.
+    * one avatar-switcher row (radio+label, native CSS interaction) that
+      shows/hides the 3 wheel-sections and highlights the matching stat/wear
+      rows in the footer. Default selection = whoever RT_頭卡 marked focus;
+      clicking a different avatar overrides it (implemented as a 3-layer CSS
+      cascade: marker-default -> blanket-hide-once-any-checked -> ID-selector
+      specific re-show, so the two mechanisms don't fight).
+    * the footer: status grid (unchanged, all 3 numbers always shown+highlit),
+      clothing row (you = always shown; the 3 NPCs = switchable, one at a
+      time), quote/mood (always tied to the focus character, per the user's
+      explicit choice not to make VOICE switchable), wrapped in
+      <details>/<summary> so it's collapsible.
+
+Known limitation (shared with the pre-existing wheel-radio design, flagged
+to the user): the avatar-switch radios use `id`/`for` (rtf-1/2/3), and HTML
+ids must be document-unique - across a long chat with many prior turns using
+the same ids, only the newest such message is guaranteed to behave, since
+`label[for]` binds to the first matching id in the whole page. Not solvable
+purely with regex text substitution (no way to mint a per-message unique id).
+"""
+import json
+import os
+import re
+
+AV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "avatars")
+
+def b64(name):
+    return open(f"{AV_DIR}/{name}.b64", encoding="utf-8").read().strip()
+
+AVATAR = {
+    "m": b64("matthias"),
+    "t": b64("ating"),
+    "l": b64("lia"),
+}
+AV_NAME = {"m": "馬提亞斯", "t": "阿霆", "l": "Lia"}
+
+# band index 0..5 = favorability bands 0-19/20-39/40-59/60-74/75-89/90-100
+PHASE = {
+    "m": {
+        "roman": "Akt",
+        "bands": [
+            ("I", "戒備", "用禮貌把心事鎖進抽屜"),
+            ("II", "動搖", "不小心多看了一眼，來不及收回"),
+            ("III", "隱忍", "克制下的灼熱凝視"),
+            ("IV", "試探", "指尖之間，藉口越來越薄"),
+            ("V", "失控", "理智潰散，只剩下想靠近的本能"),
+            ("VI", "坦白", "把多年的沉默，換成一句真話"),
+        ],
+    },
+    "t": {
+        "roman": "Akt",
+        "bands": [
+            ("I", "裝傻", "刻意不碰舊話題，笑著帶過"),
+            ("II", "破功", "提起以前的時候，語氣沒收好"),
+            ("III", "吃味", "看到你跟別人靠近，笑容慢半拍"),
+            ("IV", "賭氣", "鬧脾氣，但死也不說為什麼"),
+            ("V", "認輸", "承認自己從來沒有真的放下"),
+            ("VI", "重來", "願意再賭一次，這次不先鬆手"),
+        ],
+    },
+    "l": {
+        "roman": "Atto",
+        "bands": [
+            ("I", "疼愛", "長輩式的溫柔，界線清楚"),
+            ("II", "試溫", "說一些界線模糊的話，然後看你"),
+            ("III", "貼近", "製造機會，然後停下來等你"),
+            ("IV", "明示", "毫不掩飾，但把選擇權交回你手上"),
+            ("V", "等待", "她可以等，而且讓你知道她在等"),
+            ("VI", "卸甲", "第一次露出不安"),
+        ],
+    },
+}
+BAND_ROT = [240, 300, 0, 60, 120, 180]
+
+WHEEL_BG_SVG = (
+    '<svg viewBox="0 0 400 400" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;">'
+    '<defs><radialGradient id="rtgW{X}" cx="50%" cy="48%" r="52%">'
+    '<stop offset="0" stop-color="#6f293f" stop-opacity=".23"/>'
+    '<stop offset=".66" stop-color="#22131d" stop-opacity=".14"/>'
+    '<stop offset="1" stop-color="#0f0910" stop-opacity=".8"/></radialGradient></defs>'
+    '<circle cx="200" cy="200" r="175" fill="url(#rtgW{X})" stroke="#b98952" stroke-width="1"/>'
+    '<circle cx="200" cy="200" r="167" fill="none" stroke="#70354a" stroke-width="3"/>'
+    '<circle cx="200" cy="200" r="160" fill="none" stroke="#c6a06b" stroke-width=".8" stroke-dasharray="1 5"/>'
+    '<circle cx="200" cy="200" r="141" fill="none" stroke="#9d7247" stroke-width=".75"/>'
+    '<circle cx="200" cy="200" r="132" fill="none" stroke="#5e3042" stroke-width="1"/>'
+    '<g fill="none" stroke="#a77a4c" stroke-width=".8" opacity=".92">'
+    '<path d="M200 22c-8 19-26 27-42 17 5-18 22-30 42-17Z"/><path d="M200 22c8 19 26 27 42 17-5-18-22-30-42-17Z"/>'
+    '<path d="M378 200c-19-8-27-26-17-42 18 5 30 22 17 42Z"/><path d="M378 200c-19 8-27 26-17 42 18-5 30-22 17-42Z"/>'
+    '<path d="M200 378c-8-19-26-27-42-17 5 18 22 30 42 17Z"/><path d="M200 378c8-19 26-27 42-17-5 18-22 30-42 17Z"/>'
+    '<path d="M22 200c19-8 27-26 17-42-18 5-30 22-17 42Z"/><path d="M22 200c19 8 27 26 17 42-18-5-30-22-17-42Z"/></g>'
+    '<g fill="none" stroke="#754058" stroke-width=".75">'
+    '<path d="M200 58C238 91 273 96 316 84M342 200c-33 38-38 73-26 116M200 342c-38-33-73-38-116-26M58 200c33-38 38-73 26-116"/>'
+    '<path d="M200 58c-38 33-73 38-116 26M342 200c-33-38-38-73-26-116M200 342c38-33 73-38 116-26M58 200c33 38 38 73 26 116"/></g>'
+    '<g stroke="#7d5360" stroke-width=".7" opacity=".65">'
+    '<path d="M200 68V142M314 134l-64 37M314 266l-64-37M200 332v-74M86 266l64-37M86 134l64 37"/></g>'
+    '<g fill="#cba46b"><circle cx="200" cy="68" r="2.6"/><circle cx="314" cy="134" r="2.6"/><circle cx="314" cy="266" r="2.6"/>'
+    '<circle cx="200" cy="332" r="2.6"/><circle cx="86" cy="266" r="2.6"/><circle cx="86" cy="134" r="2.6"/></g>'
+    '<g fill="none" stroke="#b98854" stroke-width=".8">'
+    '<path d="M200 178c13-18 31-11 31 4 0 16-31 36-31 36s-31-20-31-36c0-15 18-22 31-4Z"/></g></svg>'
+)
+
+def build_wheel_section(ch):
+    p = PHASE[ch]
+    band_divs = "".join(
+        f'<div class="bd-{ch}-{i+1}">'
+        f'<span style="display:block;color:#a57d4e;font:italic 500 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.12em;">{p["roman"]} {num}</span>'
+        f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{label}</strong>'
+        f'<small style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note}</small>'
+        f'</div>'
+        for i, (num, label, note) in enumerate(p["bands"])
+    )
+    return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(84vw,392px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
+{WHEEL_BG_SVG.replace("{X}", ch)}
+<div class="rt-pointer-{ch}" style="position:absolute;z-index:4;top:7.4%;left:calc(50% - 5px);width:10px;height:42.6%;transform-origin:50% 100%;">
+<div style="position:absolute;top:0;left:50%;width:1px;height:100%;background:linear-gradient(#efd69d,rgba(199,148,83,.1));box-shadow:0 0 7px rgba(235,188,113,.45);"></div>
+<div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);color:#ecd39f;font-size:12px;">◆</div>
+</div>
+<div class="rt-wheel-center-{ch}" style="position:absolute;z-index:5;inset:30.2%;display:grid;place-items:center;border:1px solid rgba(221,182,114,.7);border-radius:50%;background:radial-gradient(circle,rgba(99,39,58,.52),rgba(28,15,24,.98) 68%);box-shadow:inset 0 0 0 5px rgba(29,16,25,.95),inset 0 0 0 6px rgba(190,145,85,.42),0 0 22px rgba(121,42,69,.27);text-align:center;">
+<div style="max-width:84%;">{band_divs}</div>
+</div>
+</section>'''
+
+def wheel_css(ch):
+    rules = []
+    for i in range(6):
+        n = i + 1
+        rot = BAND_ROT[i]
+        rules.append(
+            f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-pointer-{ch} {{ transform: rotate({rot}deg); }}\n'
+            f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-wheel-center-{ch} .bd-{ch}-{n} {{ display: block; }}'
+        )
+    return "\n".join(rules)
+
+def main():
+    css_parts = []
+    for ch in ("m", "t", "l"):
+        css_parts.append(wheel_css(ch))
+    wheel_css_all = "\n".join(css_parts)
+
+    bd_hide_selector = ",\n".join(f".bd-{ch}-{n}" for ch in ("m", "t", "l") for n in range(1, 7))
+
+    shell_css = '''
+.rt-shell { box-sizing: border-box; }
+.rt-shell * { box-sizing: border-box; }
+.rt-shell {
+  position: relative;
+  overflow: hidden;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 34px 30px 28px;
+  border: 1px solid #a97945;
+  border-radius: 5px;
+  color: #efe2ce;
+  font-family: "Noto Serif TC", "Songti TC", serif;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(126, 45, 70, .28), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,.025), transparent 42%),
+    #160e16;
+  box-shadow: inset 0 0 0 5px #21131c, inset 0 0 0 6px rgba(184,137,78,.45), 0 22px 65px rgba(14,4,12,.42);
+}
+.rt-shell::before, .rt-shell::after {
+  content: ""; position: absolute; pointer-events: none; inset: 12px;
+  border: 1px solid rgba(202, 162, 100, .38);
+}
+.rt-shell::after { inset: 17px; border-style: double; border-width: 3px; border-color: rgba(106, 43, 61, .82); }
+.rt-shell-corner {
+  position: absolute; z-index: 2; width: 104px; height: 104px; color: #c69b5f; opacity: .78; pointer-events: none;
+}
+.rt-shell-corner svg { width: 100%; height: 100%; }
+.rt-shell-corner.nw { top: 15px; left: 15px; }
+.rt-shell-corner.ne { top: 15px; right: 15px; transform: scaleX(-1); }
+.rt-shell-corner.sw { bottom: 15px; left: 15px; transform: scaleY(-1); }
+.rt-shell-corner.se { right: 15px; bottom: 15px; transform: scale(-1); }
+'''
+
+    switch_css = '''
+.rt-focus-radio { position: absolute; width: 0; height: 0; opacity: 0; }
+.rt-fm { display: none; }
+.rt-focus-switch { display: flex; justify-content: center; gap: 34px; margin: 22px 0 6px; }
+.rt-av { cursor: pointer; display: block; text-align: center; opacity: .55; }
+.rt-av:hover { opacity: .85; }
+.rt-av span { display: block; width: 56px; height: 56px; margin: 0 auto 6px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(201,156,95,.5); }
+.rt-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rt-av small { display: block; color: #cbb9aa; font-size: 10px; letter-spacing: .1em; }
+
+.rt-wheel-section { display: none; }
+''' + bd_hide_selector + ''' { display: none; }
+.rt-fm-m:not(:empty) ~ .rt-wheel-section.char-m,
+.rt-fm-t:not(:empty) ~ .rt-wheel-section.char-t,
+.rt-fm-l:not(:empty) ~ .rt-wheel-section.char-l { display: block; }
+.rt-focus-radio:checked ~ .rt-wheel-section.char-m,
+.rt-focus-radio:checked ~ .rt-wheel-section.char-t,
+.rt-focus-radio:checked ~ .rt-wheel-section.char-l { display: none; }
+#rtf-m:checked ~ .rt-wheel-section.char-m,
+#rtf-t:checked ~ .rt-wheel-section.char-t,
+#rtf-l:checked ~ .rt-wheel-section.char-l { display: block; }
+
+.rt-fm-m:not(:empty) ~ .rt-focus-switch .av-m,
+.rt-fm-t:not(:empty) ~ .rt-focus-switch .av-t,
+.rt-fm-l:not(:empty) ~ .rt-focus-switch .av-l { opacity: 1; }
+.rt-fm-m:not(:empty) ~ .rt-focus-switch .av-m span,
+.rt-fm-t:not(:empty) ~ .rt-focus-switch .av-t span,
+.rt-fm-l:not(:empty) ~ .rt-focus-switch .av-l span { box-shadow: 0 0 0 2px #c99c5f, 0 0 14px rgba(201,156,95,.6); }
+#rtf-m:checked ~ .rt-focus-switch .av-m,
+#rtf-t:checked ~ .rt-focus-switch .av-t,
+#rtf-l:checked ~ .rt-focus-switch .av-l { opacity: 1; }
+#rtf-m:checked ~ .rt-focus-switch .av-m span,
+#rtf-t:checked ~ .rt-focus-switch .av-t span,
+#rtf-l:checked ~ .rt-focus-switch .av-l span { box-shadow: 0 0 0 2px #c99c5f, 0 0 14px rgba(201,156,95,.6); }
+
+.rt-wear-row.stat-m, .rt-wear-row.stat-t, .rt-wear-row.stat-l { display: none; }
+.rt-fm-m:not(:empty) ~ .rt-footer .rt-wear-row.stat-m,
+.rt-fm-t:not(:empty) ~ .rt-footer .rt-wear-row.stat-t,
+.rt-fm-l:not(:empty) ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
+.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-m,
+.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-t,
+.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-l { display: none; }
+#rtf-m:checked ~ .rt-footer .rt-wear-row.stat-m,
+#rtf-t:checked ~ .rt-footer .rt-wear-row.stat-t,
+#rtf-l:checked ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
+
+.rt-fm-m:not(:empty) ~ .rt-footer .stat-m,
+.rt-fm-t:not(:empty) ~ .rt-footer .stat-t,
+.rt-fm-l:not(:empty) ~ .rt-footer .stat-l,
+#rtf-m:checked ~ .rt-footer .stat-m,
+#rtf-t:checked ~ .rt-footer .stat-t,
+#rtf-l:checked ~ .rt-footer .stat-l {
+  margin: -8px -14px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, transparent, rgba(201,156,95,.34) 50%, transparent);
+}
+
+.rt-footer-details summary { list-style: none; cursor: pointer; position: relative; }
+.rt-footer-details summary::-webkit-details-marker { display: none; }
+.rt-footer-details summary::after { content: "▾"; position: absolute; right: 0; top: 0; color: #c99c5f; transition: transform .2s ease; }
+.rt-footer-details:not([open]) summary::after { transform: rotate(-90deg); }
+'''
+
+    full_css = "<style>\n" + shell_css + "\n" + wheel_css_all + "\n" + switch_css + "\n</style>\n"
+
+    CORNER_SVG = (
+        '<span class="rt-shell-corner {POS}" aria-hidden="true"><svg viewBox="0 0 100 100">'
+        '<path d="M3 48C6 19 19 6 48 3M3 67C13 31 31 13 67 3M7 87c8-30 26-48 56-56M16 16c17 0 24 7 24 24C23 40 16 33 16 16Zm27 27c17-2 27 6 29 23-17 2-27-6-29-23ZM9 52c12 1 19 8 20 20-12-1-19-8-20-20Z" fill="none" stroke="currentColor" stroke-width="1"/>'
+        '<circle cx="16" cy="16" r="3" fill="none" stroke="currentColor"/></svg></span>'
+    )
+    shell_corners = "".join(CORNER_SVG.replace("{POS}", p) for p in ("nw", "ne", "sw", "se"))
+
+    # ---- RT_頭卡 (existing findRegex, extended to also emit focus markers) ----
+    head_find = (
+        r"\[HEAD\]\r?\nFOCUS:\s*.*?(?:(馬提亞斯)|(阿霆)|(Lia|莉亞)).*?\r?\n"
+        r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n\[\/HEAD\]"
+    )
+    # groups: 1=focus-m 2=focus-t 3=focus-l 4=CHAPTER 5=TIME 6=LOC 7=WEATHER 8=LEAD
+    # NOTE: the visible "今日焦點・XXX" label text is reconstructed from which
+    # focus-group matched, since we no longer capture the raw FOCUS value.
+    head_replace = (
+        f'{full_css}'
+        '<div class="rt-shell">'
+        f'{shell_corners}'
+        '<i class="rt-fm rt-fm-m" style="display:none">$1</i>'
+        '<i class="rt-fm rt-fm-t" style="display:none">$2</i>'
+        '<i class="rt-fm rt-fm-l" style="display:none">$3</i>'
+        '<div style="font-family:\'Noto Serif TC\',\'Songti TC\',serif;width:min(100%,650px);margin:14px auto 18px;padding:16px 21px 17px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">'
+        '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
+        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1$2$3</div>'
+        '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$4</div></div>'
+        '<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px 20px;padding:13px 0 12px;border-bottom:1px solid rgba(189,145,89,.22);">'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">時間</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$6</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$7</div></div></div>'
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$8</span></div></div>'
+    )
+
+    band_re = r"(?:([0-9]|1[0-9])|(2[0-9]|3[0-9])|(4[0-9]|5[0-9])|(6[0-9]|7[0-4])|(7[5-9]|8[0-9])|(9[0-9]|100))"
+
+    wheel_foot_find = (
+        r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*.*?\r?\nNOTE:\s*.*?\r?\n\[\/WHEEL\]\r?\n\r?\n"
+        r"\[FOOT\]\r?\nSCENE:\s*(.*?)\r?\nACT:\s*(.*?)\r?\nCLOCK:\s*(.*?)\r?\n"
+        rf"M:\s*{band_re}\r?\n"
+        rf"T:\s*{band_re}\r?\n"
+        rf"L:\s*{band_re}\r?\n"
+        r"HEAT:\s*(.*?)\r?\nU_WEAR:\s*(.*?)\r?\nM_WEAR:\s*(.*?)\r?\nT_WEAR:\s*(.*?)\r?\nL_WEAR:\s*(.*?)\r?\n"
+        r"VOICE:\s*(.*?)\r?\nMOOD:\s*(.*?)\r?\n\[\/FOOT\]"
+    )
+    # groups: 1 SCENE 2 ACT 3 CLOCK
+    #         4-9   M bands (band1..6)
+    #         10-15 T bands
+    #         16-21 L bands
+    #         22 HEAT 23 U_WEAR 24 M_WEAR 25 T_WEAR 26 L_WEAR 27 VOICE 28 MOOD
+    MVAL = "$4$5$6$7$8$9"
+    TVAL = "$10$11$12$13$14$15"
+    LVAL = "$16$17$18$19$20$21"
+
+    def marker_block(ch, group_start):
+        return "".join(f'<i class="mk-{ch} mk-{ch}{i+1}" style="display:none">${group_start+i}</i>' for i in range(6))
+
+    markers_all = marker_block("m", 4) + marker_block("t", 10) + marker_block("l", 16)
+
+    avatar_switch = (
+        '<input type="radio" id="rtf-m" name="rt-focus" class="rt-focus-radio">'
+        '<input type="radio" id="rtf-t" name="rt-focus" class="rt-focus-radio">'
+        '<input type="radio" id="rtf-l" name="rt-focus" class="rt-focus-radio">'
+        '<div class="rt-focus-switch" aria-label="切換角色狀態">'
+        f'<label class="rt-av av-m" for="rtf-m"><span><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><small>馬提亞斯</small></label>'
+        f'<label class="rt-av av-t" for="rtf-t"><span><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><small>阿霆</small></label>'
+        f'<label class="rt-av av-l" for="rtf-l"><span><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span><small>Lia</small></label>'
+        '</div>'
+    )
+
+    wheels_html = build_wheel_section("m") + build_wheel_section("t") + build_wheel_section("l")
+
+    footer_html = f'''<footer class="rt-footer" aria-label="角色狀態尾卡" style="font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,650px);margin:0 auto 14px;padding:17px 21px 18px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">
+<details class="rt-footer-details" open>
+<summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
+<span>$1</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$2</span><span style="text-align:right;">$3</span>
+</summary>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 26px;padding:14px 0 13px;">
+<div class="rt-status-line stat-m" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">馬提亞斯</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{MVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{MVAL}</span></div>
+<div class="rt-status-line stat-t" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">阿霆</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{TVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{TVAL}</span></div>
+<div class="rt-status-line stat-l" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">Lia</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{LVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{LVAL}</span></div>
+<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">心動震盪</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$22%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$22</span></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 22px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
+<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$23</span></div>
+<div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$24</span></div>
+<div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$25</span></div>
+<div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$26</span></div>
+</div>
+<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="display:grid;place-items:center;width:31px;height:31px;border:1px solid #8d584d;border-radius:50%;color:#c79668;background:#3c1c2a;box-shadow:inset 0 0 0 3px #27151e;font-size:13px;">誓</span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$27</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$28</div></div></div>
+</details>
+</footer>'''
+
+    wheel_foot_replace = markers_all + avatar_switch + wheels_html + footer_html + "</div>"
+
+    scripts = [
+        {
+            "id": "rt-head-001",
+            "scriptName": "RT_頭卡",
+            "findRegex": head_find,
+            "replaceString": head_replace,
+            "trimStrings": [], "placement": [2], "disabled": False,
+            "markdownOnly": True, "promptOnly": False, "runOnEdit": True,
+            "substituteRegex": 0, "minDepth": None, "maxDepth": None,
+        },
+        {
+            "id": "rt-body-002",
+            "scriptName": "RT_正文",
+            "findRegex": r"\[BODY\]\r?\n([\s\S]*?)\r?\n\[\/BODY\]",
+            "replaceString": "<div style=\"font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,610px);margin:0 auto 22px;padding:4px 4px 0;color:#dcccbe;font-size:13.5px;line-height:2.15;letter-spacing:.045em;text-align:justify;white-space:pre-wrap;\">$1</div><div style=\"width:min(100%,300px);margin:20px auto 22px;text-align:center;color:#9d7447;font-size:11px;\">❖</div>",
+            "trimStrings": [], "placement": [2], "disabled": False,
+            "markdownOnly": True, "promptOnly": False, "runOnEdit": True,
+            "substituteRegex": 0, "minDepth": None, "maxDepth": None,
+        },
+        {
+            "id": "rt-wheelfoot-003",
+            "scriptName": "RT_花冠尾卡",
+            "findRegex": wheel_foot_find,
+            "replaceString": wheel_foot_replace,
+            "trimStrings": [], "placement": [2], "disabled": False,
+            "markdownOnly": True, "promptOnly": False, "runOnEdit": True,
+            "substituteRegex": 0, "minDepth": None, "maxDepth": None,
+        },
+    ]
+
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts_wheel_footer.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(scripts, f, ensure_ascii=False, indent=2)
+    print("wrote", out_path)
+
+if __name__ == "__main__":
+    main()
