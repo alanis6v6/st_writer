@@ -161,6 +161,19 @@ WHEEL_BG_SVG = (
     '<path d="M200 178c13-18 31-11 31 4 0 16-31 36-31 36s-31-20-31-36c0-15 18-22 31-4Z"/></g></svg>'
 )
 
+# visual ring position (1=top, going clockwise) -> which band's dot the
+# background SVG actually draws there. Fixed by the SVG artwork/ROT angles,
+# not something to reorder freely.
+POS_TO_BAND = {1: 3, 2: 4, 3: 5, 4: 6, 5: 1, 6: 2}
+PHASE_POS_STYLE = {
+    1: "top:6.5%;left:calc(50% - 39px);",
+    2: "top:25%;right:-2%;",
+    3: "right:3%;bottom:17%;",
+    4: "bottom:5.5%;left:calc(50% - 39px);",
+    5: "bottom:17%;left:3%;",
+    6: "top:25%;left:-2%;",
+}
+
 def build_wheel_section(ch):
     p = PHASE[ch]
     band_divs = "".join(
@@ -171,7 +184,19 @@ def build_wheel_section(ch):
         f'</div>'
         for i, (num, label, note) in enumerate(p["bands"])
     )
-    return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(78vw,340px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
+    # 6 clickable positions around the ring, letting the player browse all
+    # six phases for this character - independent of the avatar-switch and
+    # the marker-driven "current" default. Each radio is wrapped inside its
+    # own <label> (no id/for - see switch_css comment on why) and the CSS
+    # keys off the label's own p1..p6 class via :has(), not nth-of-type,
+    # since nth-of-type can't distinguish radios that each live inside a
+    # different parent <label>.
+    phase_labels = "".join(
+        f'<label class="rt-phase p{pos}" style="{PHASE_POS_STYLE[pos]}">'
+        f'<input type="radio" class="rt-phase-radio">{p["bands"][POS_TO_BAND[pos]-1][1]}</label>'
+        for pos in range(1, 7)
+    )
+    return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(100%,340px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
 {WHEEL_BG_SVG.replace("{X}", ch)}
 <div class="rt-pointer-{ch}" style="position:absolute;z-index:4;top:7.4%;left:calc(50% - 5px);width:10px;height:42.6%;transform-origin:50% 100%;">
 <div style="position:absolute;top:0;left:50%;width:1px;height:100%;background:linear-gradient(#efd69d,rgba(199,148,83,.1));box-shadow:0 0 7px rgba(235,188,113,.45);"></div>
@@ -180,6 +205,7 @@ def build_wheel_section(ch):
 <div class="rt-wheel-center-{ch}" style="position:absolute;z-index:5;inset:30.2%;display:grid;place-items:center;border:1px solid rgba(221,182,114,.7);border-radius:50%;background:radial-gradient(circle,rgba(99,39,58,.52),rgba(28,15,24,.98) 68%);box-shadow:inset 0 0 0 5px rgba(29,16,25,.95),inset 0 0 0 6px rgba(190,145,85,.42),0 0 22px rgba(121,42,69,.27);text-align:center;">
 <div style="max-width:84%;">{band_divs}</div>
 </div>
+{phase_labels}
 </section>'''
 
 def wheel_css(ch):
@@ -190,6 +216,25 @@ def wheel_css(ch):
         rules.append(
             f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-pointer-{ch} {{ transform: rotate({rot}deg); }}\n'
             f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-wheel-center-{ch} .bd-{ch}-{n} {{ display: block; }}'
+        )
+    # phase-browsing overrides: once ANY of this wheel's 6 positions is
+    # clicked, blanket-hide all 6 band divs, then re-show only the clicked
+    # one (higher specificity via the extra .p{pos} class wins the tie).
+    rules.append(
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-1,\n'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-2,\n'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-3,\n'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-4,\n'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-5,\n'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-6 {{ display: none; }}'
+    )
+    for pos in range(1, 7):
+        band = POS_TO_BAND[pos]
+        rot = BAND_ROT[band - 1]
+        rules.append(
+            f'.char-{ch}:has(.p{pos} input:checked) .rt-pointer-{ch} {{ transform: rotate({rot}deg); }}\n'
+            f'.char-{ch}:has(.p{pos} input:checked) .rt-wheel-center-{ch} .bd-{ch}-{band} {{ display: block; }}\n'
+            f'.char-{ch}:has(.p{pos} input:checked) .p{pos} {{ color: #f0d6ad; text-shadow: 0 0 13px rgba(235,181,109,.52); transform: scale(1.06); }}'
         )
     return "\n".join(rules)
 
@@ -243,6 +288,41 @@ def main():
 .rt-frame-corner.ne { top: 6px; right: 6px; transform: scaleX(-1); }
 .rt-frame-corner.sw { bottom: 6px; left: 6px; transform: scaleY(-1); }
 .rt-frame-corner.se { bottom: 6px; right: 6px; transform: scale(-1); }
+
+/* Openings (the 5 fixed first_mes/alternate_greetings) carry an optional
+   TITLE/SUBTITLE pair that ordinary AI-generated turns never emit. Its
+   presence is the sole signal, via the .rt-title-flag marker below, that
+   switches from the default "two independent bookend cards" look (used from
+   page 2 onward, since body length varies too much per turn for one
+   continuous frame) to the old "one full-wrap cover frame" look the 5
+   openings were originally designed with - head-card, body and wheel, and
+   footer visually merge into a single bordered shell with a title header on
+   top. Structurally .rt-mid (opened at the end of RT_頭卡, closed at the
+   start of RT_花冠尾卡) always wraps the body+wheel; by default it is an
+   invisible no-op div, and only grows a matching left/right border + shared
+   background when the flag is non-empty, so the seam lines up with the
+   head/foot frames on either side of it. */
+.rt-title-flag { display: none; }
+.rt-cover { display: none; text-align: center; padding-bottom: 14px; margin-bottom: 2px; border-bottom: 1px solid rgba(189,145,89,.22); }
+.rt-cover h1 { margin: 5px 0 4px; color: #f4e8d4; font-size: clamp(19px,5.2vw,26px); font-weight: 500; letter-spacing: .16em; text-shadow: 0 1px 18px rgba(217,165,112,.15); }
+.rt-cover .rt-subtitle { color: #a98f86; font-size: 11px; letter-spacing: .14em; }
+.rt-cover .rt-title-rule { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; width: min(100%,240px); margin: 11px auto 0; color: #c59a5c; }
+.rt-cover .rt-title-rule i { display: block; height: 5px; border-top: 1px solid rgba(201,160,96,.7); border-bottom: 1px solid rgba(117,55,68,.85); }
+.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-cover { display: block; }
+.rt-title-flag:not(:empty) ~ .rt-frame-head {
+  margin-bottom: 0; border-bottom: none; border-radius: 5px 5px 0 0;
+}
+.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-frame-corner.sw,
+.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-frame-corner.se { display: none; }
+.rt-title-flag:not(:empty) ~ .rt-mid {
+  display: block; width: min(100%,420px); margin: 0 auto; padding: 0 15px;
+  border-left: 1px solid #a97945; border-right: 1px solid #a97945; background: #160e16;
+}
+.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot {
+  margin-top: 0; border-top: none; border-radius: 0 0 5px 5px;
+}
+.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot .rt-frame-corner.nw,
+.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot .rt-frame-corner.ne { display: none; }
 '''
 
     # Avatar-switch selection logic uses :has() rather than id/for or bare
@@ -339,7 +419,22 @@ def main():
 .rt-fm-l:not(:empty) ~ .rt-footer .rt-seal-l { display: block; }
 '''
 
-    full_css = "<style>\n" + shell_css + "\n" + wheel_css_all + "\n" + switch_css + "\n</style>\n"
+    # base chrome for the 6 clickable phase-position labels on each wheel
+    # (shared across all 3 characters - the per-position placement is inline,
+    # this just supplies the pill look + hides the native radio dot).
+    phase_css = '''
+.rt-phase-radio { position: absolute; width: 0; height: 0; opacity: 0; }
+.rt-phase {
+  position: absolute; z-index: 8; display: block; text-align: center;
+  width: 74px; min-height: 30px; padding: 6px 5px; border-radius: 40%;
+  background: radial-gradient(ellipse at center, rgba(20,12,20,.95) 0%, rgba(20,12,20,.82) 55%, rgba(20,12,20,0) 100%);
+  color: #ae9887; font: 500 10.5px/1.3 "Noto Serif TC", serif; letter-spacing: .1em; cursor: pointer;
+  transition: color 180ms ease, text-shadow 180ms ease, transform 180ms ease;
+}
+.rt-phase:hover { color: #f0d6ad; }
+'''
+
+    full_css = "<style>\n" + shell_css + "\n" + wheel_css_all + "\n" + phase_css + "\n" + switch_css + "\n</style>\n"
 
     CORNER_SVG = (
         '<span class="rt-frame-corner {POS}" aria-hidden="true"><svg viewBox="0 0 100 100">'
@@ -359,14 +454,21 @@ def main():
     # character's phase regardless of how FOCUS is worded.
     head_find = (
         r"\[HEAD\]\r?\nFOCUS:\s*(.*?)\r?\n"
-        r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n\[\/HEAD\]"
+        r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n"
+        r"(?:TITLE:\s*(.*?)\r?\nSUBTITLE:\s*(.*?)\r?\n)?"
+        r"\[\/HEAD\]"
     )
     # groups: 1=FOCUS 2=CHAPTER 3=TIME 4=LOC 5=WEATHER 6=LEAD
+    #         7=TITLE 8=SUBTITLE (optional - only the 5 fixed openings carry
+    #         these; ordinary AI-generated turns never emit them, which is
+    #         exactly the signal .rt-title-flag uses to pick a frame mode)
     head_replace = (
         f'{full_css}'
         '<div class="rt-scope">'
-        '<div class="rt-frame" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
+        '<i class="rt-title-flag" style="display:none">$7</i>'
+        '<div class="rt-frame rt-frame-head" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
         f'{frame_corners}'
+        '<div class="rt-cover"><h1>$7</h1><div class="rt-subtitle">$8</div><div class="rt-title-rule"><i></i><span>❦</span><i></i></div></div>'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
         '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1</div>'
         '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$2</div></div>'
@@ -375,6 +477,7 @@ def main():
         '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
         '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$6</span></div></div>'
+        '<div class="rt-mid">'
     )
 
     # who-is-focus markers now come from [WHEEL]'s LABEL (18 words, unique
@@ -428,25 +531,25 @@ def main():
 
     wheels_html = build_wheel_section("m") + build_wheel_section("t") + build_wheel_section("l")
 
-    footer_html = f'''<footer class="rt-footer rt-frame" aria-label="角色狀態尾卡" style="width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;">
+    footer_html = f'''<footer class="rt-footer rt-frame rt-frame-foot" aria-label="角色狀態尾卡" style="width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;">
 {frame_corners}
 <details class="rt-footer-details" open>
 <summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
 <span>$19</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$20</span><span style="text-align:right;">$21</span>
 </summary>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 26px;padding:14px 0 13px;">
+<div style="display:grid;grid-template-columns:1fr;gap:9px;padding:14px 0 13px;">
 <div class="rt-status-line stat-m" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">馬提亞斯</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{MVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{MVAL}</span></div>
 <div class="rt-status-line stat-t" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">阿霆</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{TVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{TVAL}</span></div>
 <div class="rt-status-line stat-l" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">Lia</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{LVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{LVAL}</span></div>
 <div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">心動震盪</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$40%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$40</span></div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 22px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
+<div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
 <div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$41</span></div>
 <div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$42</span></div>
 <div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$43</span></div>
 <div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$44</span></div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 22px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
+<div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
 <div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$45</span></div>
 <div class="rt-pose-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$46</span></div>
 <div class="rt-pose-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$47</span></div>
@@ -456,7 +559,10 @@ def main():
 </details>
 </footer>'''
 
-    wheel_foot_replace = markers_all + avatar_switch + wheels_html + footer_html + "</div>"
+    # the leading "</div>" closes .rt-mid (opened at the end of head_replace,
+    # wrapping body+wheel so its border/background can span both regardless
+    # of which frame mode is active); the trailing one closes .rt-scope.
+    wheel_foot_replace = markers_all + avatar_switch + wheels_html + "</div>" + footer_html + "</div>"
 
     scripts = [
         {

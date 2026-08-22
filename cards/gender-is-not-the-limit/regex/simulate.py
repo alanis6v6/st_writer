@@ -6,6 +6,8 @@ import json
 import re
 import sys
 
+import build_wheel_footer as bwf
+
 SCRIPTS_PATH = "scripts_wheel_footer.json"
 
 def js_replace(pattern, repl_template, text):
@@ -50,10 +52,13 @@ def apply_all_scripts(text, scripts, quiet=False):
             print(f"  [{s['scriptName']}] NO MATCH")
     return text
 
-def make_sample(m, t, l, focus="馬提亞斯", label="隱忍"):
+def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", title=None, subtitle=None):
     """`focus` is whatever [HEAD]'s FOCUS field says (can be a name or 群戲 -
     it no longer drives anything technical). `label` is [WHEEL]'s LABEL,
-    which is what actually determines the default avatar-switch selection."""
+    which is what actually determines the default avatar-switch selection.
+    `title`/`subtitle` are omitted by default - only the 5 fixed openings
+    set them, which is exactly the signal that switches frame mode."""
+    title_block = f"TITLE: {title}\nSUBTITLE: {subtitle}\n" if title is not None else ""
     return f"""[HEAD]
 FOCUS: 今日焦點・{focus}
 CHAPTER: Kapitel I
@@ -61,7 +66,7 @@ TIME: 19:00
 LOC: 新竹老宅・餐廳
 WEATHER: 起風
 LEAD: 測試用引言。
-[/HEAD]
+{title_block}[/HEAD]
 
 [BODY]
 這是測試用的正文內容，用來確認 BODY 區段的比對不會被 WHEEL/FOOT 的規則誤吃。
@@ -175,9 +180,69 @@ def main():
                 print(f"  LABEL={w} (expect fm-{ch} populated) -> FAIL: {fm.group(1) if fm else 'no match'}")
     print("  18/18 checked" if all_ok else "  see failures above")
 
+    # TITLE/SUBTITLE optional field -> frame-mode switch check
+    print("\n--- TITLE/SUBTITLE optional-field (frame mode) check ---")
+    sample_notitle = make_sample(m=50, t=50, l=50)
+    html_notitle = apply_all_scripts(sample_notitle, scripts, quiet=True)
+    flag_empty = re.search(r'class="rt-title-flag" style="display:none"></i>', html_notitle)
+    has_mid_open = '<div class="rt-mid">' in html_notitle
+    print("  no TITLE -> flag empty:", bool(flag_empty), "| .rt-mid present:", has_mid_open)
+    if not (flag_empty and has_mid_open):
+        all_ok = False
+
+    sample_title = make_sample(
+        m=50, t=50, l=50,
+        title="餐桌上的沉默", subtitle="他把未竟之言，都留在多添的那碗湯裡",
+    )
+    html_title = apply_all_scripts(sample_title, scripts, quiet=True)
+    flag_populated = re.search(r'class="rt-title-flag" style="display:none">餐桌上的沉默</i>', html_title)
+    has_cover = '<h1>餐桌上的沉默</h1><div class="rt-subtitle">他把未竟之言，都留在多添的那碗湯裡</div>' in html_title
+    has_frame_head = 'class="rt-frame rt-frame-head"' in html_title
+    has_frame_foot = 'rt-footer rt-frame rt-frame-foot' in html_title
+    print("  TITLE given -> flag populated:", bool(flag_populated), "| cover html:", has_cover,
+          "| frame-head class:", has_frame_head, "| frame-foot class:", has_frame_foot)
+    if not (flag_populated and has_cover and has_frame_head and has_frame_foot):
+        all_ok = False
+
+    # intra-wheel 6-phase click-browsing check
+    print("\n--- phase-browsing wheel positions check ---")
+    sample = make_sample(m=50, t=50, l=50)
+    html_phase = apply_all_scripts(sample, scripts, quiet=True)
+    phase_labels = re.findall(
+        r'<label class="rt-phase p(\d)"[^>]*><input type="radio" class="rt-phase-radio">([^<]*)</label>',
+        html_phase,
+    )
+    print(f"  found {len(phase_labels)} phase-radio labels (expect 18)")
+    ok_phase = len(phase_labels) == 18
+    if ok_phase:
+        order = ["m"] * 6 + ["t"] * 6 + ["l"] * 6
+        for idx, (pos_str, word) in enumerate(phase_labels):
+            pos = int(pos_str)
+            ch = order[idx]
+            expected_word = bwf.PHASE[ch]["bands"][bwf.POS_TO_BAND[pos] - 1][1]
+            if word != expected_word:
+                ok_phase = False
+                print(f"  [{idx}] ch={ch} pos={pos}: got {word!r} expected {expected_word!r}")
+    print("  18 position->word mappings correct:", ok_phase)
+    if not ok_phase:
+        all_ok = False
+
+    css_ok = True
+    for ch in ("m", "t", "l"):
+        for pos in range(1, 7):
+            band = bwf.POS_TO_BAND[pos]
+            rot = bwf.BAND_ROT[band - 1]
+            needle = f'.char-{ch}:has(.p{pos} input:checked) .rt-pointer-{ch} {{ transform: rotate({rot}deg); }}'
+            if needle not in html_phase:
+                css_ok = False
+                print("  missing CSS rule:", needle)
+    print("  phase-click CSS rotate rules present:", css_ok)
+    if not css_ok:
+        all_ok = False
+
     # tag-balance check on a full sample
     print("\n--- tag balance check ---")
-    for tag in ["div", "section", "label", "span", "footer", "details", "summary"]:
+    for tag in ["div", "section", "label", "span", "footer", "details", "summary", "i", "h1"]:
         opens = len(re.findall(rf"<{tag}\b[^>]*>", html))
         closes = len(re.findall(rf"</{tag}>", html))
         ok = opens == closes

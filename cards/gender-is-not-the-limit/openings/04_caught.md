@@ -15,6 +15,8 @@ TIME: 14:18
 LOC: 新竹老宅・一樓客廳
 WEATHER: 炎熱
 LEAD: 他以為自己掩飾得滴水不漏，但狼狽是藏不住的。
+TITLE: 他今天提早回家
+SUBTITLE: 從容的人也會慌，只是慌得比較安靜。
 [/HEAD]
 
 [BODY]
