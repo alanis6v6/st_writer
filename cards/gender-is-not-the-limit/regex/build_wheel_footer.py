@@ -19,24 +19,27 @@ Design (see conversation for full rationale):
       alternation (no arithmetic, just digit-pattern matching), using an
       "empty vs non-empty capture group" + CSS `:not(:empty)` sibling trick
       since replaceString can't conditionally emit literal text.
-    * one avatar-switcher row (radio+label, native CSS interaction) that
-      shows/hides the 3 wheel-sections and highlights the matching stat/wear
-      rows in the footer. Default selection = whoever RT_頭卡 marked focus;
-      clicking a different avatar overrides it (implemented as a 3-layer CSS
-      cascade: marker-default -> blanket-hide-once-any-checked -> ID-selector
-      specific re-show, so the two mechanisms don't fight).
+    * one avatar-switcher row that shows/hides the 3 wheel-sections and
+      highlights the matching stat/wear rows in the footer. Default
+      selection = whoever RT_頭卡 marked focus; clicking a different avatar
+      overrides it (implemented as a 3-layer CSS cascade: marker-default ->
+      blanket-hide-once-any-checked -> :has()-based specific re-show, so
+      the two mechanisms don't fight). The radio for each avatar is nested
+      *inside* its own <label> rather than linked via id/for, and the
+      show/hide rules use :has() to reach outside the label - this message's
+      markup repeats verbatim in every chat turn, so id="rtf-m" would NOT be
+      unique across a long conversation, and `label[for]` binds to the
+      first same-id element in the WHOLE document (not the one visually
+      nearby), which is why an id/for version silently toggles the wrong
+      message. Radio `name` is still seeded with the M/T/L digits as a
+      cheap (not perfect) reduction of cross-message radio-group crosstalk,
+      since `name` grouping is also page-global.
     * the footer: status grid (unchanged, all 3 numbers always shown+highlit),
       clothing row (you = always shown; the 3 NPCs = switchable, one at a
       time), quote/mood (always tied to the focus character, per the user's
       explicit choice not to make VOICE switchable), wrapped in
-      <details>/<summary> so it's collapsible.
-
-Known limitation (shared with the pre-existing wheel-radio design, flagged
-to the user): the avatar-switch radios use `id`/`for` (rtf-1/2/3), and HTML
-ids must be document-unique - across a long chat with many prior turns using
-the same ids, only the newest such message is guaranteed to behave, since
-`label[for]` binds to the first matching id in the whole page. Not solvable
-purely with regex text substitution (no way to mint a per-message unique id).
+      <details>/<summary> so it's collapsible. The 心事 seal now shows the
+      focus character's own photo (was a plain "誓" glyph placeholder).
 """
 import json
 import os
@@ -168,7 +171,7 @@ def build_wheel_section(ch):
         f'</div>'
         for i, (num, label, note) in enumerate(p["bands"])
     )
-    return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(84vw,392px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
+    return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(78vw,340px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
 {WHEEL_BG_SVG.replace("{X}", ch)}
 <div class="rt-pointer-{ch}" style="position:absolute;z-index:4;top:7.4%;left:calc(50% - 5px);width:10px;height:42.6%;transform-origin:50% 100%;">
 <div style="position:absolute;top:0;left:50%;width:1px;height:100%;background:linear-gradient(#efd69d,rgba(199,148,83,.1));box-shadow:0 0 7px rgba(235,188,113,.45);"></div>
@@ -204,7 +207,7 @@ def main():
 .rt-shell {
   position: relative;
   overflow: hidden;
-  width: min(100%, 760px);
+  width: min(100%, 480px);
   margin: 0 auto;
   padding: 34px 30px 28px;
   border: 1px solid #a97945;
@@ -232,6 +235,19 @@ def main():
 .rt-shell-corner.se { right: 15px; bottom: 15px; transform: scale(-1); }
 '''
 
+    # Avatar-switch selection logic uses :has() rather than id/for or bare
+    # sibling radios. Why: this message's HTML repeats verbatim in every
+    # turn, so id="rtf-m" (and any radio `name`) is NOT unique across a long
+    # chat - `label[for]` binds to the first same-id element in the WHOLE
+    # document, so clicking an avatar on message #12 could silently toggle
+    # message #1's hidden radio instead. Wrapping the radio inside its
+    # <label> sidesteps that (no id needed for the click to register at
+    # all), and :has() lets the surrounding stylesheet still reach outside
+    # the label to show/hide the matching wheel-section - :has() has been
+    # baseline-supported (Safari/Chrome/Firefox) for years at this point,
+    # so it's a safe bet. `name` is still seeded with the M/T/L digits below
+    # as a cheap (not perfect) reduction of cross-message radio-group
+    # crosstalk, since `name` grouping is also page-global.
     switch_css = '''
 .rt-focus-radio { position: absolute; width: 0; height: 0; opacity: 0; }
 .rt-fm { display: none; }
@@ -247,12 +263,12 @@ def main():
 .rt-fm-m:not(:empty) ~ .rt-wheel-section.char-m,
 .rt-fm-t:not(:empty) ~ .rt-wheel-section.char-t,
 .rt-fm-l:not(:empty) ~ .rt-wheel-section.char-l { display: block; }
-.rt-focus-radio:checked ~ .rt-wheel-section.char-m,
-.rt-focus-radio:checked ~ .rt-wheel-section.char-t,
-.rt-focus-radio:checked ~ .rt-wheel-section.char-l { display: none; }
-#rtf-m:checked ~ .rt-wheel-section.char-m,
-#rtf-t:checked ~ .rt-wheel-section.char-t,
-#rtf-l:checked ~ .rt-wheel-section.char-l { display: block; }
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-wheel-section.char-m,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-wheel-section.char-t,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-wheel-section.char-l { display: none; }
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-wheel-section.char-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-wheel-section.char-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-wheel-section.char-l { display: block; }
 
 .rt-fm-m:not(:empty) ~ .rt-focus-switch .av-m,
 .rt-fm-t:not(:empty) ~ .rt-focus-switch .av-t,
@@ -260,30 +276,30 @@ def main():
 .rt-fm-m:not(:empty) ~ .rt-focus-switch .av-m span,
 .rt-fm-t:not(:empty) ~ .rt-focus-switch .av-t span,
 .rt-fm-l:not(:empty) ~ .rt-focus-switch .av-l span { box-shadow: 0 0 0 2px #c99c5f, 0 0 14px rgba(201,156,95,.6); }
-#rtf-m:checked ~ .rt-focus-switch .av-m,
-#rtf-t:checked ~ .rt-focus-switch .av-t,
-#rtf-l:checked ~ .rt-focus-switch .av-l { opacity: 1; }
-#rtf-m:checked ~ .rt-focus-switch .av-m span,
-#rtf-t:checked ~ .rt-focus-switch .av-t span,
-#rtf-l:checked ~ .rt-focus-switch .av-l span { box-shadow: 0 0 0 2px #c99c5f, 0 0 14px rgba(201,156,95,.6); }
+.rt-focus-switch:has(.av-m input:checked) .av-m,
+.rt-focus-switch:has(.av-t input:checked) .av-t,
+.rt-focus-switch:has(.av-l input:checked) .av-l { opacity: 1; }
+.rt-focus-switch:has(.av-m input:checked) .av-m span,
+.rt-focus-switch:has(.av-t input:checked) .av-t span,
+.rt-focus-switch:has(.av-l input:checked) .av-l span { box-shadow: 0 0 0 2px #c99c5f, 0 0 14px rgba(201,156,95,.6); }
 
 .rt-wear-row.stat-m, .rt-wear-row.stat-t, .rt-wear-row.stat-l { display: none; }
 .rt-fm-m:not(:empty) ~ .rt-footer .rt-wear-row.stat-m,
 .rt-fm-t:not(:empty) ~ .rt-footer .rt-wear-row.stat-t,
 .rt-fm-l:not(:empty) ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
-.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-m,
-.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-t,
-.rt-focus-radio:checked ~ .rt-footer .rt-wear-row.stat-l { display: none; }
-#rtf-m:checked ~ .rt-footer .rt-wear-row.stat-m,
-#rtf-t:checked ~ .rt-footer .rt-wear-row.stat-t,
-#rtf-l:checked ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-wear-row.stat-m,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-wear-row.stat-t,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-wear-row.stat-l { display: none; }
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-footer .rt-wear-row.stat-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-wear-row.stat-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
 
 .rt-fm-m:not(:empty) ~ .rt-footer .stat-m,
 .rt-fm-t:not(:empty) ~ .rt-footer .stat-t,
 .rt-fm-l:not(:empty) ~ .rt-footer .stat-l,
-#rtf-m:checked ~ .rt-footer .stat-m,
-#rtf-t:checked ~ .rt-footer .stat-t,
-#rtf-l:checked ~ .rt-footer .stat-l {
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-footer .stat-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .stat-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .stat-l {
   margin: -8px -14px;
   padding: 8px 14px;
   border-radius: 6px;
@@ -294,6 +310,12 @@ def main():
 .rt-footer-details summary::-webkit-details-marker { display: none; }
 .rt-footer-details summary::after { content: "▾"; position: absolute; right: 0; top: 0; color: #c99c5f; transition: transform .2s ease; }
 .rt-footer-details:not([open]) summary::after { transform: rotate(-90deg); }
+
+.rt-seal { position: absolute; inset: 0; display: none; }
+.rt-seal img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rt-fm-m:not(:empty) ~ .rt-footer .rt-seal-m,
+.rt-fm-t:not(:empty) ~ .rt-footer .rt-seal-t,
+.rt-fm-l:not(:empty) ~ .rt-footer .rt-seal-l { display: block; }
 '''
 
     full_css = "<style>\n" + shell_css + "\n" + wheel_css_all + "\n" + switch_css + "\n</style>\n"
@@ -320,7 +342,7 @@ def main():
         '<i class="rt-fm rt-fm-m" style="display:none">$1</i>'
         '<i class="rt-fm rt-fm-t" style="display:none">$2</i>'
         '<i class="rt-fm rt-fm-l" style="display:none">$3</i>'
-        '<div style="font-family:\'Noto Serif TC\',\'Songti TC\',serif;width:min(100%,650px);margin:14px auto 18px;padding:16px 21px 17px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">'
+        '<div style="font-family:\'Noto Serif TC\',\'Songti TC\',serif;width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
         '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1$2$3</div>'
         '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$4</div></div>'
@@ -354,20 +376,18 @@ def main():
 
     markers_all = marker_block("m", 4) + marker_block("t", 10) + marker_block("l", 16)
 
+    RADIO_NAME = f"rt-focus-{MVAL}{TVAL}{LVAL}"  # see switch_css comment above
     avatar_switch = (
-        '<input type="radio" id="rtf-m" name="rt-focus" class="rt-focus-radio">'
-        '<input type="radio" id="rtf-t" name="rt-focus" class="rt-focus-radio">'
-        '<input type="radio" id="rtf-l" name="rt-focus" class="rt-focus-radio">'
         '<div class="rt-focus-switch" aria-label="切換角色狀態">'
-        f'<label class="rt-av av-m" for="rtf-m"><span><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><small>馬提亞斯</small></label>'
-        f'<label class="rt-av av-t" for="rtf-t"><span><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><small>阿霆</small></label>'
-        f'<label class="rt-av av-l" for="rtf-l"><span><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span><small>Lia</small></label>'
+        f'<label class="rt-av av-m"><input type="radio" name="{RADIO_NAME}" class="rt-focus-radio"><span><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><small>馬提亞斯</small></label>'
+        f'<label class="rt-av av-t"><input type="radio" name="{RADIO_NAME}" class="rt-focus-radio"><span><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><small>阿霆</small></label>'
+        f'<label class="rt-av av-l"><input type="radio" name="{RADIO_NAME}" class="rt-focus-radio"><span><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span><small>Lia</small></label>'
         '</div>'
     )
 
     wheels_html = build_wheel_section("m") + build_wheel_section("t") + build_wheel_section("l")
 
-    footer_html = f'''<footer class="rt-footer" aria-label="角色狀態尾卡" style="font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,650px);margin:0 auto 14px;padding:17px 21px 18px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">
+    footer_html = f'''<footer class="rt-footer" aria-label="角色狀態尾卡" style="font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">
 <details class="rt-footer-details" open>
 <summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
 <span>$1</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$2</span><span style="text-align:right;">$3</span>
@@ -384,7 +404,7 @@ def main():
 <div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$25</span></div>
 <div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$26</span></div>
 </div>
-<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="display:grid;place-items:center;width:31px;height:31px;border:1px solid #8d584d;border-radius:50%;color:#c79668;background:#3c1c2a;box-shadow:inset 0 0 0 3px #27151e;font-size:13px;">誓</span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$27</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$28</div></div></div>
+<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$27</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$28</div></div></div>
 </details>
 </footer>'''
 
@@ -404,7 +424,7 @@ def main():
             "id": "rt-body-002",
             "scriptName": "RT_正文",
             "findRegex": r"\[BODY\]\r?\n([\s\S]*?)\r?\n\[\/BODY\]",
-            "replaceString": "<div style=\"font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,610px);margin:0 auto 22px;padding:4px 4px 0;color:#dcccbe;font-size:13.5px;line-height:2.15;letter-spacing:.045em;text-align:justify;white-space:pre-wrap;\">$1</div><div style=\"width:min(100%,300px);margin:20px auto 22px;text-align:center;color:#9d7447;font-size:11px;\">❖</div>",
+            "replaceString": "<div style=\"font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,420px);margin:0 auto 22px;padding:4px 4px 0;color:#dcccbe;font-size:13.5px;line-height:2.15;letter-spacing:.045em;text-align:justify;white-space:pre-wrap;\">$1</div><div style=\"width:min(100%,220px);margin:20px auto 22px;text-align:center;color:#9d7447;font-size:11px;\">❖</div>",
             "trimStrings": [], "placement": [2], "disabled": False,
             "markdownOnly": True, "promptOnly": False, "runOnEdit": True,
             "substituteRegex": 0, "minDepth": None, "maxDepth": None,
