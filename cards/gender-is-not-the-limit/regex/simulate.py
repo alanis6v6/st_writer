@@ -52,13 +52,14 @@ def apply_all_scripts(text, scripts, quiet=False):
             print(f"  [{s['scriptName']}] NO MATCH")
     return text
 
-def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", title=None, subtitle=None):
+def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", title=None, subtitle=None, synopsis=None):
     """`focus` is whatever [HEAD]'s FOCUS field says (can be a name or 群戲 -
     it no longer drives anything technical). `label` is [WHEEL]'s LABEL,
     which is what actually determines the default avatar-switch selection.
-    `title`/`subtitle` are omitted by default - only the 5 fixed openings
-    set them, which is exactly the signal that switches frame mode."""
-    title_block = f"TITLE: {title}\nSUBTITLE: {subtitle}\n" if title is not None else ""
+    `title`/`subtitle`/`synopsis` are omitted by default - only the 5 fixed
+    openings set them (all three together), which is exactly the signal
+    that switches frame mode."""
+    title_block = f"TITLE: {title}\nSUBTITLE: {subtitle}\nSYNOPSIS: {synopsis}\n" if title is not None else ""
     return f"""[HEAD]
 FOCUS: 今日焦點・{focus}
 CHAPTER: Kapitel I
@@ -180,28 +181,32 @@ def main():
                 print(f"  LABEL={w} (expect fm-{ch} populated) -> FAIL: {fm.group(1) if fm else 'no match'}")
     print("  18/18 checked" if all_ok else "  see failures above")
 
-    # TITLE/SUBTITLE optional field -> frame-mode switch check
-    print("\n--- TITLE/SUBTITLE optional-field (frame mode) check ---")
+    # TITLE/SUBTITLE/SYNOPSIS optional trio -> frame-mode switch check
+    print("\n--- TITLE/SUBTITLE/SYNOPSIS optional-field (frame mode) check ---")
     sample_notitle = make_sample(m=50, t=50, l=50)
     html_notitle = apply_all_scripts(sample_notitle, scripts, quiet=True)
     flag_empty = re.search(r'class="rt-title-flag" style="display:none"></i>', html_notitle)
-    has_mid_open = '<div class="rt-mid">' in html_notitle
-    print("  no TITLE -> flag empty:", bool(flag_empty), "| .rt-mid present:", has_mid_open)
-    if not (flag_empty and has_mid_open):
+    has_shell_open = '<div class="rt-shell">' in html_notitle
+    print("  no TITLE -> flag empty:", bool(flag_empty), "| .rt-shell present:", has_shell_open)
+    if not (flag_empty and has_shell_open):
         all_ok = False
 
     sample_title = make_sample(
         m=50, t=50, l=50,
         title="餐桌上的沉默", subtitle="他把未竟之言，都留在多添的那碗湯裡",
+        synopsis="新竹入秋的晚風從天井灌進老宅，他把最後一道湯放下，目光在你身上停了半秒，比平常久。",
     )
     html_title = apply_all_scripts(sample_title, scripts, quiet=True)
     flag_populated = re.search(r'class="rt-title-flag" style="display:none">餐桌上的沉默</i>', html_title)
-    has_cover = '<h1>餐桌上的沉默</h1><div class="rt-subtitle">他把未竟之言，都留在多添的那碗湯裡</div>' in html_title
+    has_header = '<div class="rt-kicker">Kapitel I · 馬提亞斯</div><h1>餐桌上的沉默</h1><div class="rt-subtitle">他把未竟之言，都留在多添的那碗湯裡</div>' in html_title
+    has_synopsis = '<p class="rt-synopsis">新竹入秋的晚風從天井灌進老宅' in html_title
+    has_shell = '<div class="rt-shell">' in html_title
     has_frame_head = 'class="rt-frame rt-frame-head"' in html_title
     has_frame_foot = 'rt-footer rt-frame rt-frame-foot' in html_title
-    print("  TITLE given -> flag populated:", bool(flag_populated), "| cover html:", has_cover,
+    print("  TITLE given -> flag populated:", bool(flag_populated), "| header html:", has_header,
+          "| synopsis:", has_synopsis, "| shell:", has_shell,
           "| frame-head class:", has_frame_head, "| frame-foot class:", has_frame_foot)
-    if not (flag_populated and has_cover and has_frame_head and has_frame_foot):
+    if not (flag_populated and has_header and has_synopsis and has_shell and has_frame_head and has_frame_foot):
         all_ok = False
 
     # intra-wheel 6-phase click-browsing check
@@ -242,7 +247,7 @@ def main():
 
     # tag-balance check on a full sample
     print("\n--- tag balance check ---")
-    for tag in ["div", "section", "label", "span", "footer", "details", "summary", "i", "h1"]:
+    for tag in ["div", "section", "label", "span", "footer", "details", "summary", "i", "h1", "p"]:
         opens = len(re.findall(rf"<{tag}\b[^>]*>", html))
         closes = len(re.findall(rf"</{tag}>", html))
         ok = opens == closes

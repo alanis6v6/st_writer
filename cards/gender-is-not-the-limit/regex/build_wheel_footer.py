@@ -290,39 +290,74 @@ def main():
 .rt-frame-corner.se { bottom: 6px; right: 6px; transform: scale(-1); }
 
 /* Openings (the 5 fixed first_mes/alternate_greetings) carry an optional
-   TITLE/SUBTITLE pair that ordinary AI-generated turns never emit. Its
-   presence is the sole signal, via the .rt-title-flag marker below, that
+   TITLE/SUBTITLE/SYNOPSIS trio that ordinary AI-generated turns never emit.
+   Its presence is the sole signal, via the .rt-title-flag marker below, that
    switches from the default "two independent bookend cards" look (used from
    page 2 onward, since body length varies too much per turn for one
-   continuous frame) to the old "one full-wrap cover frame" look the 5
-   openings were originally designed with - head-card, body and wheel, and
-   footer visually merge into a single bordered shell with a title header on
-   top. Structurally .rt-mid (opened at the end of RT_頭卡, closed at the
-   start of RT_花冠尾卡) always wraps the body+wheel; by default it is an
-   invisible no-op div, and only grows a matching left/right border + shared
-   background when the flag is non-empty, so the seam lines up with the
-   head/foot frames on either side of it. */
+   continuous frame to look right) to the original "one full-wrap cover
+   frame" the 5 openings were designed with - a single bordered .rt-shell
+   wraps a kicker/title/subtitle header, a synopsis line, the head-card, the
+   body+wheel, and the footer together, exactly like the reference mockup.
+   .rt-shell is always opened at the start of RT_頭卡 and closed at the end
+   of RT_花冠尾卡; by default it draws no border/background at all (a no-op
+   passthrough, so .rt-frame-head/.rt-frame-foot keep their own independent
+   bookend-card borders) and only becomes the single visible frame - with
+   .rt-frame-head/.rt-frame-foot's own borders suppressed so there's exactly
+   one border, not three - when the flag is non-empty. */
 .rt-title-flag { display: none; }
-.rt-cover { display: none; text-align: center; padding-bottom: 14px; margin-bottom: 2px; border-bottom: 1px solid rgba(189,145,89,.22); }
-.rt-cover h1 { margin: 5px 0 4px; color: #f4e8d4; font-size: clamp(19px,5.2vw,26px); font-weight: 500; letter-spacing: .16em; text-shadow: 0 1px 18px rgba(217,165,112,.15); }
-.rt-cover .rt-subtitle { color: #a98f86; font-size: 11px; letter-spacing: .14em; }
-.rt-cover .rt-title-rule { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; width: min(100%,240px); margin: 11px auto 0; color: #c59a5c; }
-.rt-cover .rt-title-rule i { display: block; height: 5px; border-top: 1px solid rgba(201,160,96,.7); border-bottom: 1px solid rgba(117,55,68,.85); }
-.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-cover { display: block; }
-.rt-title-flag:not(:empty) ~ .rt-frame-head {
-  margin-bottom: 0; border-bottom: none; border-radius: 5px 5px 0 0;
+.rt-shell { display: block; }
+.rt-shell-corner { display: none; }
+.rt-header { display: none; }
+.rt-synopsis { display: none; }
+.rt-title-flag:not(:empty) ~ .rt-shell {
+  position: relative; overflow: hidden;
+  width: min(100%,420px); margin: 14px auto 18px; padding: 20px 17px 17px;
+  border: 1px solid #a97945; border-radius: 6px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(126, 45, 70, .24), transparent 40%),
+    linear-gradient(145deg, rgba(255,255,255,.02), transparent 42%),
+    #160e16;
+  box-shadow: inset 0 0 0 3px #21131c, inset 0 0 0 4px rgba(184,137,78,.42), 0 10px 30px rgba(14,4,12,.35);
 }
-.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-frame-corner.sw,
-.rt-title-flag:not(:empty) ~ .rt-frame-head .rt-frame-corner.se { display: none; }
-.rt-title-flag:not(:empty) ~ .rt-mid {
-  display: block; width: min(100%,420px); margin: 0 auto; padding: 0 15px;
-  border-left: 1px solid #a97945; border-right: 1px solid #a97945; background: #160e16;
+.rt-title-flag:not(:empty) ~ .rt-shell::before,
+.rt-title-flag:not(:empty) ~ .rt-shell::after {
+  content: ""; position: absolute; pointer-events: none; inset: 7px;
+  border: 1px solid rgba(202, 162, 100, .36);
 }
-.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot {
-  margin-top: 0; border-top: none; border-radius: 0 0 5px 5px;
+.rt-title-flag:not(:empty) ~ .rt-shell::after { inset: 10px; border-style: double; border-width: 3px; border-color: rgba(106, 43, 61, .78); }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-shell-corner { display: block; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-header { display: block; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-synopsis { display: block; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-head,
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-foot {
+  border: none; border-radius: 0; box-shadow: none; background: none;
 }
-.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot .rt-frame-corner.nw,
-.rt-title-flag:not(:empty) ~ .rt-footer.rt-frame-foot .rt-frame-corner.ne { display: none; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-head::before,
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-head::after,
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-foot::before,
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-foot::after { content: none; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-head .rt-frame-corner,
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-frame-foot .rt-frame-corner { display: none; }
+.rt-title-flag:not(:empty) ~ .rt-shell .rt-footer.rt-frame-foot {
+  border-top: 1px solid rgba(189,145,89,.3); padding-top: 16px;
+}
+
+.rt-shell-corner {
+  position: absolute; z-index: 2; width: 46px; height: 46px; color: #c69b5f; opacity: .78; pointer-events: none;
+}
+.rt-shell-corner svg { width: 100%; height: 100%; }
+.rt-shell-corner.nw { top: 8px; left: 8px; }
+.rt-shell-corner.ne { top: 8px; right: 8px; transform: scaleX(-1); }
+.rt-shell-corner.sw { bottom: 8px; left: 8px; transform: scaleY(-1); }
+.rt-shell-corner.se { bottom: 8px; right: 8px; transform: scale(-1); }
+
+.rt-header { position: relative; z-index: 3; padding: 4px 6px 16px; text-align: center; }
+.rt-kicker { color: #b9905d; font: 600 10.5px/1.4 "Cormorant Garamond", serif; letter-spacing: .3em; text-transform: uppercase; }
+.rt-header h1 { margin: 6px 0 4px; color: #f4e8d4; font-size: clamp(21px,5.6vw,28px); font-weight: 500; letter-spacing: .17em; text-indent: .17em; text-shadow: 0 1px 18px rgba(217,165,112,.15); }
+.rt-header .rt-subtitle { color: #a98f86; font-size: 11px; letter-spacing: .16em; }
+.rt-title-rule { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; width: min(100%,240px); margin: 13px auto 0; color: #c59a5c; }
+.rt-title-rule i { display: block; height: 5px; border-top: 1px solid rgba(201,160,96,.7); border-bottom: 1px solid rgba(117,55,68,.85); }
+.rt-synopsis { position: relative; z-index: 3; margin: 0 0 18px; padding: 13px 16px; color: #cbb9aa; text-align: center; font-size: 12px; line-height: 1.9; letter-spacing: .05em; }
 '''
 
     # Avatar-switch selection logic uses :has() rather than id/for or bare
@@ -442,6 +477,8 @@ def main():
         '<circle cx="16" cy="16" r="3" fill="none" stroke="currentColor"/></svg></span>'
     )
     frame_corners = "".join(CORNER_SVG.replace("{POS}", p) for p in ("nw", "ne", "sw", "se"))
+    SHELL_CORNER_SVG = CORNER_SVG.replace("rt-frame-corner", "rt-shell-corner")
+    shell_corners = "".join(SHELL_CORNER_SVG.replace("{POS}", p) for p in ("nw", "ne", "sw", "se"))
 
     # ---- RT_頭卡 ----
     # FOCUS no longer has to name one of the three characters literally -
@@ -452,23 +489,34 @@ def main():
     # avatar-switch selection is now driven by the [WHEEL] block's LABEL
     # instead (see wheel_foot_find below), which always names one specific
     # character's phase regardless of how FOCUS is worded.
+    # FOCUS's value always carries the literal "今日焦點・" prefix verbatim
+    # (system_prompt.md's <Output_Format> spec: "FOCUS: 今日焦點・（本輪主導角色）"),
+    # so that prefix belongs in the fixed part of the pattern, not inside the
+    # capture group - otherwise every place that reuses $1 (the headcard's
+    # own "今日焦點・$1" line, and the new kicker below) ends up showing the
+    # prefix twice.
     head_find = (
-        r"\[HEAD\]\r?\nFOCUS:\s*(.*?)\r?\n"
+        r"\[HEAD\]\r?\nFOCUS:\s*今日焦點・(.*?)\r?\n"
         r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n"
-        r"(?:TITLE:\s*(.*?)\r?\nSUBTITLE:\s*(.*?)\r?\n)?"
+        r"(?:TITLE:\s*(.*?)\r?\nSUBTITLE:\s*(.*?)\r?\nSYNOPSIS:\s*(.*?)\r?\n)?"
         r"\[\/HEAD\]"
     )
-    # groups: 1=FOCUS 2=CHAPTER 3=TIME 4=LOC 5=WEATHER 6=LEAD
-    #         7=TITLE 8=SUBTITLE (optional - only the 5 fixed openings carry
-    #         these; ordinary AI-generated turns never emit them, which is
-    #         exactly the signal .rt-title-flag uses to pick a frame mode)
+    # groups: 1=FOCUS (just the name/群戲 part, "今日焦點・" is now literal)
+    #         2=CHAPTER 3=TIME 4=LOC 5=WEATHER 6=LEAD
+    #         7=TITLE 8=SUBTITLE 9=SYNOPSIS (optional, all-or-nothing - only
+    #         the 5 fixed openings carry these; ordinary AI-generated turns
+    #         never emit them, which is exactly the signal .rt-title-flag
+    #         uses to pick a frame mode)
     head_replace = (
         f'{full_css}'
         '<div class="rt-scope">'
         '<i class="rt-title-flag" style="display:none">$7</i>'
+        '<div class="rt-shell">'
+        f'{shell_corners}'
+        '<div class="rt-header"><div class="rt-kicker">$2 · $1</div><h1>$7</h1><div class="rt-subtitle">$8</div><div class="rt-title-rule"><i></i><span>❦</span><i></i></div></div>'
+        '<p class="rt-synopsis">$9</p>'
         '<div class="rt-frame rt-frame-head" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
         f'{frame_corners}'
-        '<div class="rt-cover"><h1>$7</h1><div class="rt-subtitle">$8</div><div class="rt-title-rule"><i></i><span>❦</span><i></i></div></div>'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
         '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1</div>'
         '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$2</div></div>'
@@ -477,7 +525,6 @@ def main():
         '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
         '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$6</span></div></div>'
-        '<div class="rt-mid">'
     )
 
     # who-is-focus markers now come from [WHEEL]'s LABEL (18 words, unique
@@ -559,10 +606,11 @@ def main():
 </details>
 </footer>'''
 
-    # the leading "</div>" closes .rt-mid (opened at the end of head_replace,
-    # wrapping body+wheel so its border/background can span both regardless
-    # of which frame mode is active); the trailing one closes .rt-scope.
-    wheel_foot_replace = markers_all + avatar_switch + wheels_html + "</div>" + footer_html + "</div>"
+    # the first trailing "</div>" closes .rt-shell (opened at the very start
+    # of head_replace, wrapping everything from the title header through the
+    # footer so its border/background can span all of it in title mode); the
+    # second closes .rt-scope.
+    wheel_foot_replace = markers_all + avatar_switch + wheels_html + footer_html + "</div></div>"
 
     scripts = [
         {
