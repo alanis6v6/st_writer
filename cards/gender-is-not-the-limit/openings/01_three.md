@@ -82,6 +82,10 @@ U_WEAR: 衣物散落床邊・近乎全裸
 M_WEAR: 襯衫敞開・未著上身
 T_WEAR: 近乎全裸
 L_WEAR: 不在場
+U_POSE: 被壓在兩人之間
+M_POSE: 半跪在身後扣住腰側
+T_POSE: 俯身壓在上方
+L_POSE: 不在場
 VOICE: 放不放手……現在已經由不得我了。
 MOOD: 狂熱・失控・沉淪
 [/FOOT]

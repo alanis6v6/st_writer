@@ -201,38 +201,48 @@ def main():
 
     bd_hide_selector = ",\n".join(f".bd-{ch}-{n}" for ch in ("m", "t", "l") for n in range(1, 7))
 
+    # `.rt-scope` used to be the single big bordered frame wrapping the whole
+    # message (head->body->wheel->footer). Body length varies wildly (a
+    # couple hundred characters up to ~1200+), and a single tall bordered
+    # box either looked awkwardly empty or forced the frame to stretch with
+    # it. Split it: `.rt-scope` is now an *invisible* wrapper (box-sizing
+    # reset + font/color inheritance only, no border/background) so the
+    # sibling-selector plumbing between head/wheel/footer still works
+    # regardless of body length; the gold double-ring + corner ornaments
+    # move onto `.rt-frame`, a reusable bordered "bookend" card applied
+    # separately to the head-card and the footer, with body+wheel floating
+    # unframed and unconstrained in between.
     shell_css = '''
-.rt-shell { box-sizing: border-box; }
-.rt-shell * { box-sizing: border-box; }
-.rt-shell {
-  position: relative;
-  overflow: hidden;
-  width: min(100%, 480px);
-  margin: 0 auto;
-  padding: 34px 30px 28px;
-  border: 1px solid #a97945;
-  border-radius: 5px;
+.rt-scope, .rt-scope * { box-sizing: border-box; }
+.rt-scope {
+  display: block;
   color: #efe2ce;
   font-family: "Noto Serif TC", "Songti TC", serif;
+}
+.rt-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #a97945;
+  border-radius: 5px;
   background:
-    radial-gradient(circle at 50% 18%, rgba(126, 45, 70, .28), transparent 34%),
-    linear-gradient(145deg, rgba(255,255,255,.025), transparent 42%),
+    radial-gradient(circle at 50% 18%, rgba(126, 45, 70, .24), transparent 40%),
+    linear-gradient(145deg, rgba(255,255,255,.02), transparent 42%),
     #160e16;
-  box-shadow: inset 0 0 0 5px #21131c, inset 0 0 0 6px rgba(184,137,78,.45), 0 22px 65px rgba(14,4,12,.42);
+  box-shadow: inset 0 0 0 3px #21131c, inset 0 0 0 4px rgba(184,137,78,.42), 0 10px 30px rgba(14,4,12,.35);
 }
-.rt-shell::before, .rt-shell::after {
-  content: ""; position: absolute; pointer-events: none; inset: 12px;
-  border: 1px solid rgba(202, 162, 100, .38);
+.rt-frame::before, .rt-frame::after {
+  content: ""; position: absolute; pointer-events: none; inset: 6px;
+  border: 1px solid rgba(202, 162, 100, .36);
 }
-.rt-shell::after { inset: 17px; border-style: double; border-width: 3px; border-color: rgba(106, 43, 61, .82); }
-.rt-shell-corner {
-  position: absolute; z-index: 2; width: 104px; height: 104px; color: #c69b5f; opacity: .78; pointer-events: none;
+.rt-frame::after { inset: 9px; border-style: double; border-width: 3px; border-color: rgba(106, 43, 61, .78); }
+.rt-frame-corner {
+  position: absolute; z-index: 2; width: 38px; height: 38px; color: #c69b5f; opacity: .75; pointer-events: none;
 }
-.rt-shell-corner svg { width: 100%; height: 100%; }
-.rt-shell-corner.nw { top: 15px; left: 15px; }
-.rt-shell-corner.ne { top: 15px; right: 15px; transform: scaleX(-1); }
-.rt-shell-corner.sw { bottom: 15px; left: 15px; transform: scaleY(-1); }
-.rt-shell-corner.se { right: 15px; bottom: 15px; transform: scale(-1); }
+.rt-frame-corner svg { width: 100%; height: 100%; }
+.rt-frame-corner.nw { top: 6px; left: 6px; }
+.rt-frame-corner.ne { top: 6px; right: 6px; transform: scaleX(-1); }
+.rt-frame-corner.sw { bottom: 6px; left: 6px; transform: scaleY(-1); }
+.rt-frame-corner.se { bottom: 6px; right: 6px; transform: scale(-1); }
 '''
 
     # Avatar-switch selection logic uses :has() rather than id/for or bare
@@ -294,6 +304,17 @@ def main():
 .rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-wear-row.stat-t,
 .rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-wear-row.stat-l { display: grid; }
 
+.rt-pose-row.stat-m, .rt-pose-row.stat-t, .rt-pose-row.stat-l { display: none; }
+.rt-fm-m:not(:empty) ~ .rt-footer .rt-pose-row.stat-m,
+.rt-fm-t:not(:empty) ~ .rt-footer .rt-pose-row.stat-t,
+.rt-fm-l:not(:empty) ~ .rt-footer .rt-pose-row.stat-l { display: grid; }
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-pose-row.stat-m,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-pose-row.stat-t,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-pose-row.stat-l { display: none; }
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-footer .rt-pose-row.stat-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-pose-row.stat-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-pose-row.stat-l { display: grid; }
+
 .rt-fm-m:not(:empty) ~ .rt-footer .stat-m,
 .rt-fm-t:not(:empty) ~ .rt-footer .stat-t,
 .rt-fm-l:not(:empty) ~ .rt-footer .stat-l,
@@ -321,60 +342,80 @@ def main():
     full_css = "<style>\n" + shell_css + "\n" + wheel_css_all + "\n" + switch_css + "\n</style>\n"
 
     CORNER_SVG = (
-        '<span class="rt-shell-corner {POS}" aria-hidden="true"><svg viewBox="0 0 100 100">'
+        '<span class="rt-frame-corner {POS}" aria-hidden="true"><svg viewBox="0 0 100 100">'
         '<path d="M3 48C6 19 19 6 48 3M3 67C13 31 31 13 67 3M7 87c8-30 26-48 56-56M16 16c17 0 24 7 24 24C23 40 16 33 16 16Zm27 27c17-2 27 6 29 23-17 2-27-6-29-23ZM9 52c12 1 19 8 20 20-12-1-19-8-20-20Z" fill="none" stroke="currentColor" stroke-width="1"/>'
         '<circle cx="16" cy="16" r="3" fill="none" stroke="currentColor"/></svg></span>'
     )
-    shell_corners = "".join(CORNER_SVG.replace("{POS}", p) for p in ("nw", "ne", "sw", "se"))
+    frame_corners = "".join(CORNER_SVG.replace("{POS}", p) for p in ("nw", "ne", "sw", "se"))
 
-    # ---- RT_頭卡 (existing findRegex, extended to also emit focus markers) ----
+    # ---- RT_頭卡 ----
+    # FOCUS no longer has to name one of the three characters literally -
+    # "今日焦點・群戲" (group scene, per <Focus_Engine>) is valid and common,
+    # and an earlier version of this regex required a name match here,
+    # silently failing (and taking the whole shared <style> block down with
+    # it, since it's only emitted here) on every group-scene turn. Default
+    # avatar-switch selection is now driven by the [WHEEL] block's LABEL
+    # instead (see wheel_foot_find below), which always names one specific
+    # character's phase regardless of how FOCUS is worded.
     head_find = (
-        r"\[HEAD\]\r?\nFOCUS:\s*.*?(?:(馬提亞斯)|(阿霆)|(Lia|莉亞)).*?\r?\n"
+        r"\[HEAD\]\r?\nFOCUS:\s*(.*?)\r?\n"
         r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n\[\/HEAD\]"
     )
-    # groups: 1=focus-m 2=focus-t 3=focus-l 4=CHAPTER 5=TIME 6=LOC 7=WEATHER 8=LEAD
-    # NOTE: the visible "今日焦點・XXX" label text is reconstructed from which
-    # focus-group matched, since we no longer capture the raw FOCUS value.
+    # groups: 1=FOCUS 2=CHAPTER 3=TIME 4=LOC 5=WEATHER 6=LEAD
     head_replace = (
         f'{full_css}'
-        '<div class="rt-shell">'
-        f'{shell_corners}'
-        '<i class="rt-fm rt-fm-m" style="display:none">$1</i>'
-        '<i class="rt-fm rt-fm-t" style="display:none">$2</i>'
-        '<i class="rt-fm rt-fm-l" style="display:none">$3</i>'
-        '<div style="font-family:\'Noto Serif TC\',\'Songti TC\',serif;width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">'
+        '<div class="rt-scope">'
+        '<div class="rt-frame" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
+        f'{frame_corners}'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1$2$3</div>'
-        '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$4</div></div>'
+        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1</div>'
+        '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$2</div></div>'
         '<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px 20px;padding:13px 0 12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">時間</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$6</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$7</div></div></div>'
-        '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$8</span></div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">時間</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$3</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$6</span></div></div>'
     )
 
+    # who-is-focus markers now come from [WHEEL]'s LABEL (18 words, unique
+    # per character - see head_find above for why FOCUS itself isn't safe
+    # to use for this).
+    LABEL_WORDS = {ch: [label for _, label, _ in PHASE[ch]["bands"]] for ch in ("m", "t", "l")}
+    label_alt = "(?:" + "|".join(f"({w})" for ch in ("m", "t", "l") for w in LABEL_WORDS[ch]) + ")"
+
     wheel_foot_find = (
-        r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*.*?\r?\nNOTE:\s*.*?\r?\n\[\/WHEEL\]\r?\n\r?\n"
+        r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*" + label_alt + r"\r?\nNOTE:\s*.*?\r?\n\[\/WHEEL\]\r?\n\r?\n"
         r"\[FOOT\]\r?\nSCENE:\s*(.*?)\r?\nACT:\s*(.*?)\r?\nCLOCK:\s*(.*?)\r?\n"
         rf"M:\s*{band_regex('m')}\r?\n"
         rf"T:\s*{band_regex('t')}\r?\n"
         rf"L:\s*{band_regex('l')}\r?\n"
         r"HEAT:\s*(.*?)\r?\nU_WEAR:\s*(.*?)\r?\nM_WEAR:\s*(.*?)\r?\nT_WEAR:\s*(.*?)\r?\nL_WEAR:\s*(.*?)\r?\n"
+        r"U_POSE:\s*(.*?)\r?\nM_POSE:\s*(.*?)\r?\nT_POSE:\s*(.*?)\r?\nL_POSE:\s*(.*?)\r?\n"
         r"VOICE:\s*(.*?)\r?\nMOOD:\s*(.*?)\r?\n\[\/FOOT\]"
     )
-    # groups: 1 SCENE 2 ACT 3 CLOCK
-    #         4-9   M bands (band1..6)
-    #         10-15 T bands
-    #         16-21 L bands
-    #         22 HEAT 23 U_WEAR 24 M_WEAR 25 T_WEAR 26 L_WEAR 27 VOICE 28 MOOD
-    MVAL = "$4$5$6$7$8$9"
-    TVAL = "$10$11$12$13$14$15"
-    LVAL = "$16$17$18$19$20$21"
+    # groups: 1-6 LABEL=m words, 7-12 LABEL=t words, 13-18 LABEL=l words
+    #         19 SCENE 20 ACT 21 CLOCK
+    #         22-27 M bands  28-33 T bands  34-39 L bands
+    #         40 HEAT
+    #         41 U_WEAR 42 M_WEAR 43 T_WEAR 44 L_WEAR
+    #         45 U_POSE 46 M_POSE 47 T_POSE 48 L_POSE
+    #         49 VOICE 50 MOOD
+    MVAL = "$22$23$24$25$26$27"
+    TVAL = "$28$29$30$31$32$33"
+    LVAL = "$34$35$36$37$38$39"
 
     def marker_block(ch, group_start):
         return "".join(f'<i class="mk-{ch} mk-{ch}{i+1}" style="display:none">${group_start+i}</i>' for i in range(6))
 
-    markers_all = marker_block("m", 4) + marker_block("t", 10) + marker_block("l", 16)
+    fm_m = "".join(f"${i}" for i in range(1, 7))
+    fm_t = "".join(f"${i}" for i in range(7, 13))
+    fm_l = "".join(f"${i}" for i in range(13, 19))
+    focus_markers = (
+        f'<i class="rt-fm rt-fm-m" style="display:none">{fm_m}</i>'
+        f'<i class="rt-fm rt-fm-t" style="display:none">{fm_t}</i>'
+        f'<i class="rt-fm rt-fm-l" style="display:none">{fm_l}</i>'
+    )
+    markers_all = focus_markers + marker_block("m", 22) + marker_block("t", 28) + marker_block("l", 34)
 
     RADIO_NAME = f"rt-focus-{MVAL}{TVAL}{LVAL}"  # see switch_css comment above
     avatar_switch = (
@@ -387,24 +428,31 @@ def main():
 
     wheels_html = build_wheel_section("m") + build_wheel_section("t") + build_wheel_section("l")
 
-    footer_html = f'''<footer class="rt-footer" aria-label="角色狀態尾卡" style="font-family:'Noto Serif TC','Songti TC',serif;width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;position:relative;border-top:1px solid rgba(205,164,102,.72);border-bottom:1px solid rgba(112,50,67,.84);background:linear-gradient(90deg,transparent,rgba(102,41,59,.16) 12%,rgba(102,41,59,.16) 88%,transparent),rgba(27,15,23,.86);">
+    footer_html = f'''<footer class="rt-footer rt-frame" aria-label="角色狀態尾卡" style="width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;">
+{frame_corners}
 <details class="rt-footer-details" open>
 <summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
-<span>$1</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$2</span><span style="text-align:right;">$3</span>
+<span>$19</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$20</span><span style="text-align:right;">$21</span>
 </summary>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 26px;padding:14px 0 13px;">
 <div class="rt-status-line stat-m" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">馬提亞斯</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{MVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{MVAL}</span></div>
 <div class="rt-status-line stat-t" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">阿霆</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{TVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{TVAL}</span></div>
 <div class="rt-status-line stat-l" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">Lia</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{LVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{LVAL}</span></div>
-<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">心動震盪</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$22%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$22</span></div>
+<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">心動震盪</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$40%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$40</span></div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 22px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
-<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$23</span></div>
-<div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$24</span></div>
-<div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$25</span></div>
-<div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$26</span></div>
+<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$41</span></div>
+<div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$42</span></div>
+<div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$43</span></div>
+<div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$44</span></div>
 </div>
-<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$27</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$28</div></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 22px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
+<div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$45</span></div>
+<div class="rt-pose-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$46</span></div>
+<div class="rt-pose-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$47</span></div>
+<div class="rt-pose-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$48</span></div>
+</div>
+<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$49</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$50</div></div></div>
 </details>
 </footer>'''
 

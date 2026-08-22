@@ -50,7 +50,10 @@ def apply_all_scripts(text, scripts, quiet=False):
             print(f"  [{s['scriptName']}] NO MATCH")
     return text
 
-def make_sample(m, t, l, focus="馬提亞斯"):
+def make_sample(m, t, l, focus="馬提亞斯", label="隱忍"):
+    """`focus` is whatever [HEAD]'s FOCUS field says (can be a name or 群戲 -
+    it no longer drives anything technical). `label` is [WHEEL]'s LABEL,
+    which is what actually determines the default avatar-switch selection."""
     return f"""[HEAD]
 FOCUS: 今日焦點・{focus}
 CHAPTER: Kapitel I
@@ -67,7 +70,7 @@ LEAD: 測試用引言。
 [WHEEL]
 ROT: 0
 ROMAN: Akt III
-LABEL: 隱忍
+LABEL: {label}
 NOTE: 測試備註
 [/WHEEL]
 
@@ -83,6 +86,10 @@ U_WEAR: 測試你的衣著
 M_WEAR: 測試馬提亞斯衣著
 T_WEAR: 測試阿霆衣著
 L_WEAR: 測試Lia衣著
+U_POSE: 測試你的姿勢
+M_POSE: 測試馬提亞斯姿勢
+T_POSE: 測試阿霆姿勢
+L_POSE: 測試Lia姿勢
 VOICE: 測試心事。
 MOOD: 測試心情
 [/FOOT]"""
@@ -137,16 +144,36 @@ def main():
                 print(f"--- {ch}={v} (expected band {expected}) --- shown={shown} -> {status}")
     print(f"boundary sweep: {len(test_values)*3} checks run, {'all OK' if all_ok else 'FAILURES ABOVE'}")
 
-    # check the "who is focus -> which avatar defaults active" marker
-    print("\n--- focus-marker check (阿霆 focus) ---")
-    sample = make_sample(m=50, t=50, l=50, focus="阿霆")
+    # check the "who is focus -> which avatar defaults active" marker.
+    # Driven by [WHEEL]'s LABEL now (not [HEAD]'s FOCUS name), specifically
+    # so a FOCUS of "群戲" (group scene - a real, common, previously-fatal
+    # case) still works: RT_頭卡 no longer requires a name match at all.
+    print("\n--- focus-marker check (WHEEL LABEL=賭氣, i.e. Ating, FOCUS=群戲) ---")
+    sample = make_sample(m=50, t=50, l=50, focus="群戲", label="賭氣")
     html = apply_all_scripts(sample, scripts)
-    has_fm_t = re.search(r'class="rt-fm rt-fm-t"[^>]*>阿霆<', html)
+    has_fm_t = re.search(r'class="rt-fm rt-fm-t"[^>]*>賭氣<', html)
     has_fm_m_empty = re.search(r'class="rt-fm rt-fm-m"[^>]*></i>', html)
     print("  fm-t populated:", bool(has_fm_t))
     print("  fm-m empty:", bool(has_fm_m_empty))
     if not (has_fm_t and has_fm_m_empty):
         all_ok = False
+
+    print("\n--- LABEL alternation check (all 18 words, one per character) ---")
+    LABEL_WORDS = {
+        "m": ["戒備", "動搖", "隱忍", "試探", "失控", "坦白"],
+        "t": ["裝傻", "破功", "吃味", "賭氣", "認輸", "重來"],
+        "l": ["疼愛", "試溫", "貼近", "明示", "等待", "卸甲"],
+    }
+    for ch, words in LABEL_WORDS.items():
+        for w in words:
+            sample = make_sample(m=50, t=50, l=50, focus="群戲", label=w)
+            html2 = apply_all_scripts(sample, scripts, quiet=True)
+            fm = re.search(rf'class="rt-fm rt-fm-{ch}"[^>]*>([^<]*)</i>', html2)
+            ok = bool(fm and fm.group(1) == w)
+            if not ok:
+                all_ok = False
+                print(f"  LABEL={w} (expect fm-{ch} populated) -> FAIL: {fm.group(1) if fm else 'no match'}")
+    print("  18/18 checked" if all_ok else "  see failures above")
 
     # tag-balance check on a full sample
     print("\n--- tag balance check ---")
