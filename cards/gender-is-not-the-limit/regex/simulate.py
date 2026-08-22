@@ -52,13 +52,18 @@ def apply_all_scripts(text, scripts, quiet=False):
             print(f"  [{s['scriptName']}] NO MATCH")
     return text
 
-def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", title=None, subtitle=None, synopsis=None):
+def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", note="測試備註",
+                 m_voice="測試馬提亞斯心事。", t_voice="測試阿霆心事。", l_voice="測試Lia心事。",
+                 title=None, subtitle=None, synopsis=None):
     """`focus` is whatever [HEAD]'s FOCUS field says (can be a name or 群戲 -
     it no longer drives anything technical). `label` is [WHEEL]'s LABEL,
-    which is what actually determines the default avatar-switch selection.
-    `title`/`subtitle`/`synopsis` are omitted by default - only the 5 fixed
-    openings set them (all three together), which is exactly the signal
-    that switches frame mode."""
+    which is what actually determines the default avatar-switch selection
+    (now 19 possible words: the 18 normal ones + Lia's lock word 親情).
+    `note` is [WHEEL]'s NOTE, which the "current" wheel band now displays
+    verbatim (dynamic, not the static per-band table text) until the player
+    clicks to browse the phase index. `title`/`subtitle`/`synopsis` are
+    omitted by default - only the 5 fixed openings set them (all three
+    together), which is exactly the signal that switches frame mode."""
     title_block = f"TITLE: {title}\nSUBTITLE: {subtitle}\nSYNOPSIS: {synopsis}\n" if title is not None else ""
     return f"""[HEAD]
 FOCUS: 今日焦點・{focus}
@@ -77,7 +82,7 @@ LEAD: 測試用引言。
 ROT: 0
 ROMAN: Akt III
 LABEL: {label}
-NOTE: 測試備註
+NOTE: {note}
 [/WHEEL]
 
 [FOOT]
@@ -96,7 +101,9 @@ U_POSE: 測試你的姿勢
 M_POSE: 測試馬提亞斯姿勢
 T_POSE: 測試阿霆姿勢
 L_POSE: 測試Lia姿勢
-VOICE: 測試心事。
+M_VOICE: {m_voice}
+T_VOICE: {t_voice}
+L_VOICE: {l_voice}
 MOOD: 測試心情
 [/FOOT]"""
 
@@ -164,7 +171,7 @@ def main():
     if not (has_fm_t and has_fm_m_empty):
         all_ok = False
 
-    print("\n--- LABEL alternation check (all 18 words, one per character) ---")
+    print("\n--- LABEL alternation check (18 normal words + Lia's lock word) ---")
     LABEL_WORDS = {
         "m": ["戒備", "動搖", "隱忍", "試探", "失控", "坦白"],
         "t": ["裝傻", "破功", "吃味", "賭氣", "認輸", "重來"],
@@ -179,7 +186,14 @@ def main():
             if not ok:
                 all_ok = False
                 print(f"  LABEL={w} (expect fm-{ch} populated) -> FAIL: {fm.group(1) if fm else 'no match'}")
-    print("  18/18 checked" if all_ok else "  see failures above")
+    sample = make_sample(m=50, t=50, l=50, focus="群戲", label=bwf.LOCK_LABEL_L)
+    html2 = apply_all_scripts(sample, scripts, quiet=True)
+    fm_l = re.search(r'class="rt-fm rt-fm-l"[^>]*>([^<]*)</i>', html2)
+    ok_lock_fm = bool(fm_l and fm_l.group(1) == bwf.LOCK_LABEL_L)
+    if not ok_lock_fm:
+        all_ok = False
+        print(f"  LABEL={bwf.LOCK_LABEL_L} (Lia lock, expect fm-l populated) -> FAIL: {fm_l.group(1) if fm_l else 'no match'}")
+    print("  18/18 normal + lock word checked" if all_ok else "  see failures above")
 
     # TITLE/SUBTITLE/SYNOPSIS optional trio -> frame-mode switch check
     print("\n--- TITLE/SUBTITLE/SYNOPSIS optional-field (frame mode) check ---")
@@ -203,10 +217,85 @@ def main():
     has_shell = '<div class="rt-shell">' in html_title
     has_frame_head = 'class="rt-frame rt-frame-head"' in html_title
     has_frame_foot = 'rt-footer rt-frame rt-frame-foot' in html_title
+    has_focus_caption = 'FOCUS · 馬提亞斯' in html_title
     print("  TITLE given -> flag populated:", bool(flag_populated), "| header html:", has_header,
           "| synopsis:", has_synopsis, "| shell:", has_shell,
-          "| frame-head class:", has_frame_head, "| frame-foot class:", has_frame_foot)
-    if not (flag_populated and has_header and has_synopsis and has_shell and has_frame_head and has_frame_foot):
+          "| frame-head class:", has_frame_head, "| frame-foot class:", has_frame_foot,
+          "| English FOCUS caption:", has_focus_caption)
+    if not (flag_populated and has_header and has_synopsis and has_shell and has_frame_head and has_frame_foot and has_focus_caption):
+        all_ok = False
+
+    # English structural captions in the head/foot cards
+    print("\n--- English head/foot caption check ---")
+    sample = make_sample(m=50, t=50, l=50)
+    html_cap = apply_all_scripts(sample, scripts, quiet=True)
+    captions_ok = True
+    for needle in ["FOCUS · 馬提亞斯", ">TIME<", ">LOCATION<", ">WEATHER<", ">HEAT<", ">YOU<", "SECRET: "]:
+        if needle not in html_cap:
+            captions_ok = False
+            print(f"  missing caption: {needle!r}")
+    print("  English captions present:", captions_ok)
+    if not captions_ok:
+        all_ok = False
+
+    # per-character VOICE ("心事"/SECRET) switching + 不在場 check
+    print("\n--- per-character SECRET (VOICE) switching check ---")
+    sample = make_sample(m=50, t=50, l=50, focus="馬提亞斯", label="隱忍",
+                          m_voice="馬提亞斯的心事", t_voice="不在場", l_voice="不在場")
+    html_voice = apply_all_scripts(sample, scripts, quiet=True)
+    voice_rows_ok = True
+    for ch, text in (("m", "馬提亞斯的心事"), ("t", "不在場"), ("l", "不在場")):
+        m = re.search(rf'class="rt-voice-row stat-{ch}"[^>]*><b[^>]*>SECRET: </b>([^<]*)</div>', html_voice)
+        if not (m and m.group(1) == text):
+            voice_rows_ok = False
+            print(f"  stat-{ch} SECRET row -> expected {text!r}, got {m.group(1) if m else None!r}")
+    # default visibility: only stat-m row should show (mk-m/rt-fm-m focus),
+    # stat-t/stat-l rows exist in the markup but are CSS-hidden by default
+    # (can't check computed CSS here, but marker+row presence together is
+    # what drives it in a real browser - already covered by the switch_css
+    # rules being generated per character symmetrically to wear/pose).
+    print("  all 3 SECRET rows carry correct text (incl. 不在場 for absent):", voice_rows_ok)
+    if not voice_rows_ok:
+        all_ok = False
+
+    # dynamic NOTE check: the "current" (marker-matched) band must show
+    # this turn's captured NOTE text verbatim, not the static per-band table
+    # text - that's the whole point of making it MVU-driven instead of a
+    # fixed lookup.
+    print("\n--- dynamic NOTE (current band) check ---")
+    fresh_note = "這次的藉口比昨天更薄了"
+    sample = make_sample(m=45, t=50, l=50, focus="馬提亞斯", label="隱忍", note=fresh_note)
+    html_note = apply_all_scripts(sample, scripts, quiet=True)
+    dyn_shown = f'<small class="nt-dyn" style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{fresh_note}</small>' in html_note
+    static_present_but_hidden = 'class="nt-static" style="display:none' in html_note
+    # the static table note for band III/隱忍 must still be present verbatim
+    # (that's what phase-browsing falls back to) and must NOT itself equal
+    # this turn's fresh note - i.e. dynamic and static really are two
+    # different texts, not the same string rendered twice.
+    static_table_text = bwf.PHASE["m"]["bands"][2][2]
+    static_shown_is_table_text = f'<small class="nt-static" style="display:none;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{static_table_text}</small>' in html_note
+    print("  nt-dyn span carries this turn's fresh NOTE:", dyn_shown,
+          "| nt-static spans present (for phase-browsing) and default-hidden:", static_present_but_hidden,
+          "| nt-static still holds the fixed table text (distinct from fresh NOTE):", static_shown_is_table_text)
+    if not (dyn_shown and static_present_but_hidden and static_shown_is_table_text):
+        all_ok = False
+
+    # Lia-lock band check: LABEL=親情 must produce a dedicated locked band
+    # (mk-l-lock marker populated, bd-l-lock present) independent of L's
+    # numeric favorability value, per system_prompt.md <Lia_Lock>.
+    print("\n--- Lia-lock wheel band check ---")
+    lock_note = "還是會擔心你，只是擔心的方式變了"
+    sample = make_sample(m=50, t=50, l=72, focus="Lia", label=bwf.LOCK_LABEL_L, note=lock_note)
+    html_lock = apply_all_scripts(sample, scripts, quiet=True)
+    mk_lock_populated = re.search(r'class="mk-l-lock" style="display:none">([^<]*)</i>', html_lock)
+    has_lock_div = '<div class="bd-l-lock" style="display:none">' in html_lock
+    has_lock_label = f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{bwf.LOCK_LABEL_L}</strong>' in html_lock
+    has_lock_note = f'<small style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{lock_note}</small>' in html_lock
+    has_lock_css = f'.mk-l-lock:not(:empty) ~ .char-l .rt-pointer-l {{ transform: rotate({bwf.LOCK_ROT_L}deg); }}' in html_lock
+    print("  mk-l-lock marker populated:", bool(mk_lock_populated and mk_lock_populated.group(1) == bwf.LOCK_LABEL_L),
+          "| bd-l-lock div present:", has_lock_div, "| lock LABEL rendered:", has_lock_label,
+          "| lock NOTE rendered dynamically:", has_lock_note, "| lock CSS override present:", has_lock_css)
+    if not (mk_lock_populated and mk_lock_populated.group(1) == bwf.LOCK_LABEL_L and has_lock_div and has_lock_label and has_lock_note and has_lock_css):
         all_ok = False
 
     # intra-wheel 6-phase click-browsing check

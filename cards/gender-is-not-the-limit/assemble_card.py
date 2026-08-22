@@ -113,7 +113,9 @@ U_WEAR: 居家棉T・薄外套
 M_WEAR: 襯衫・領帶鬆開
 T_WEAR: 不在場
 L_WEAR: 不在場
-VOICE: 她看書的樣子跟她母親很像——這句話我永遠不會說出口。
+M_VOICE: 她看書的樣子跟她母親很像——這句話我永遠不會說出口。
+T_VOICE: 不在場
+L_VOICE: 不在場
 MOOD: 平靜・暗湧
 [/FOOT]
 <START>"""
@@ -234,7 +236,7 @@ card = {
     "scenario": scenario,
     "first_mes": first_mes,
     "mes_example": mes_example,
-    "creatorcomment": "三線並行多角色卡：馬提亞斯・霍夫曼／陸昀霆／莉亞・費拉羅。五個開局＋自訂。花冠與尾卡可點頭像切換角色狀態，好感度階段由 regex 從數值算出，無需 AI 額外輸出。",
+    "creatorcomment": "三線並行多角色卡：馬提亞斯・霍夫曼／陸昀霆／莉亞・費拉羅。五個開局＋自訂。花冠與尾卡可點頭像切換角色狀態（含心事欄位，不在場顯示「不在場」），好感度階段由 regex 從數值算出，花冠當下顯示的描述取自每輪 AI 實際寫的內容，Lia 感情線鎖定後花冠會切到專屬狀態，無需 AI 額外輸出數值判斷。",
     "avatar": "none",
     "talkativeness": "0.5",
     "fav": False,
@@ -248,7 +250,7 @@ card = {
         "scenario": scenario,
         "first_mes": first_mes,
         "mes_example": mes_example,
-        "creator_notes": "第一版組裝：五個開局（含自訂待補選單）、世界書 15 條、regex（頭卡/正文/花冠尾卡/記憶配對/探索發現）。尚未完成：卡片封面圖、自訂開局選單 regex、Stage 6 文風總校、Stage 8 試玩模擬。",
+        "creator_notes": "第二版組裝：五個開局（800-1200 字，含自訂待補選單）、世界書 15 條、regex（頭卡/正文/花冠尾卡/記憶配對/探索發現）。頭尾卡結構標題已改英文，心事欄位隨點選角色切換（不在場顯示「不在場」），花冠當下描述改用每輪 AI 實際輸出的內容、Lia 鎖定後有專屬花冠狀態。尚未完成：卡片封面圖、自訂開局選單 regex、Stage 8 試玩模擬。",
         "system_prompt": system_prompt,
         "post_history_instructions": "",
         "tags": ["多角色", "現代", "台灣", "監護人", "青梅竹馬", "劇情向"],

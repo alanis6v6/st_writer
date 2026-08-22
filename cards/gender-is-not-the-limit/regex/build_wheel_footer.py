@@ -6,40 +6,66 @@ Design (see conversation for full rationale):
 - RT_頭卡: unchanged head-card render, PLUS emits 3 hidden "who is focus" markers
   (rt-fm-m / rt-fm-t / rt-fm-l) so later scripts can default the avatar switch
   to whoever is narratively focused this turn, purely via string matching on
-  the FOCUS field (no numeric logic needed here).
+  the FOCUS field (no numeric logic needed here). Structural captions (TIME/
+  LOCATION/WEATHER/FOCUS) are in English; narrative field values stay in the
+  card's own Chinese.
 - RT_正文: unchanged.
-- RT_花冠尾卡 (NEW, replaces RT_花冠轉盤 + RT_尾卡): one combined script that
-  spans [WHEEL]...[/WHEEL] through [FOOT]...[/FOOT] (they're adjacent in the
-  output format, so this is a safe non-greedy span - it never touches BODY).
-  It renders:
-    * 3 wheel-sections (Matthias / Ating / Lia), each showing ALL its own
-      current-phase text statically per character (no per-turn LLM writing
-      needed for the two non-focus characters) - which band is "current" is
-      computed purely from the M/T/L numbers via regex numeric-range
-      alternation (no arithmetic, just digit-pattern matching), using an
-      "empty vs non-empty capture group" + CSS `:not(:empty)` sibling trick
-      since replaceString can't conditionally emit literal text.
+- RT_花冠尾卡 (replaces RT_花冠轉盤 + RT_尾卡): one combined script that spans
+  [WHEEL]...[/WHEEL] through [FOOT]...[/FOOT] (they're adjacent in the output
+  format, so this is a safe non-greedy span - it never touches BODY). It
+  renders:
+    * 3 wheel-sections (Matthias / Ating / Lia). Which of the 6 favorability
+      bands is "current" is still computed purely from the M/T/L numbers via
+      regex numeric-range alternation (no arithmetic, just digit-pattern
+      matching) - that part is unchanged and doesn't rely on the model
+      getting anything right. What DOES change: the current band's displayed
+      description is no longer the same static lore text every single time
+      the story revisits that band - it's this turn's actually-captured
+      $NOTE (system_prompt.md's <Phases> instructs the model to write a
+      fresh one-line note every turn, MVU-driven off the current scene, and
+      that text now actually reaches the screen). Clicking through the 6
+      ring positions to browse the phase index still shows the fixed table
+      text (a stable "journey map" of the six milestones), which is a
+      different, deliberately static, purpose from "what's happening right
+      now" - the two are two different <small> elements toggled by the same
+      :has(.rt-phase-radio:checked) signal already used for the ring-click
+      feature.
+    * Lia's wheel additionally supports a 7th, MVU-driven state outside the
+      normal 6-band table: once Lia_感情線狀態 is permanently closed (see
+      system_prompt.md <Lia_Lock>), the model outputs LABEL: 親情 instead of
+      one of the 6 normal words, and the wheel switches Lia's whole display
+      to a dedicated "locked" band (own ROT, own dynamic note) regardless of
+      what her favorability number does afterward - previously there was no
+      such state in this schema at all, so an actual Lia-lock playthrough
+      would have made LABEL fail to match any of the 18 known words and
+      silently taken the whole shared <style> block down with it (the same
+      failure class as the once-fatal "群戲" FOCUS bug documented in
+      README.md). The lock band is driven by its own marker (mk-l-lock,
+      sourced straight from the LABEL capture, independent of the numeric
+      bands), inserted into the cascade so it wins over the numeric-band
+      default but still loses to an explicit phase-ring click (same
+      last-rule-wins ordering trick as everywhere else in this file).
     * one avatar-switcher row that shows/hides the 3 wheel-sections and
-      highlights the matching stat/wear rows in the footer. Default
-      selection = whoever RT_頭卡 marked focus; clicking a different avatar
-      overrides it (implemented as a 3-layer CSS cascade: marker-default ->
-      blanket-hide-once-any-checked -> :has()-based specific re-show, so
-      the two mechanisms don't fight). The radio for each avatar is nested
-      *inside* its own <label> rather than linked via id/for, and the
-      show/hide rules use :has() to reach outside the label - this message's
-      markup repeats verbatim in every chat turn, so id="rtf-m" would NOT be
-      unique across a long conversation, and `label[for]` binds to the
-      first same-id element in the WHOLE document (not the one visually
-      nearby), which is why an id/for version silently toggles the wrong
-      message. Radio `name` is still seeded with the M/T/L digits as a
-      cheap (not perfect) reduction of cross-message radio-group crosstalk,
-      since `name` grouping is also page-global.
+      highlights the matching stat/wear/pose/voice rows in the footer.
+      Default selection = whoever RT_頭卡 marked focus (via [WHEEL]'s LABEL,
+      now 19 possible words - the 18 normal ones plus Lia's lock word);
+      clicking a different avatar overrides it. Same id/for-avoidance
+      rationale as before: the radio lives inside its own <label>, and
+      show/hide uses :has() to reach outside it.
     * the footer: status grid (unchanged, all 3 numbers always shown+highlit),
-      clothing row (you = always shown; the 3 NPCs = switchable, one at a
-      time), quote/mood (always tied to the focus character, per the user's
-      explicit choice not to make VOICE switchable), wrapped in
-      <details>/<summary> so it's collapsible. The 心事 seal now shows the
-      focus character's own photo (was a plain "誓" glyph placeholder).
+      clothing + pose rows (you = always shown; the 3 NPCs = switchable, one
+      at a time - unchanged), and now the "心事"/SECRET text too: it used to
+      be a single value tied only to the narrative focus character (an
+      explicit earlier design choice not to make it switchable). Per the
+      newer requirement that it should track whichever avatar is currently
+      selected - and read "不在場" for whoever isn't in the scene, exactly
+      like the wear/pose rows already do - VOICE is now split into
+      M_VOICE/T_VOICE/L_VOICE and wired through the identical switch
+      mechanism as the wear/pose rows. MOOD stays a single scene-level value
+      (it was never meant to be a per-character field). Wrapped in
+      <details>/<summary> so it's collapsible. The circular photo beside it
+      still tracks whichever avatar is selected (rt-seal-m/t/l), same as the
+      text now does.
 """
 import json
 import os
@@ -95,10 +121,22 @@ PHASE = {
 }
 BAND_ROT = [240, 300, 0, 60, 120, 180]
 
+# Lia's 7th, non-numeric-band state (see module docstring + system_prompt.md
+# <Lia_Lock>). ROT reuses the "closed circle" angle (same as band VI) since
+# it's meant to read as an ending, not a step forward in the normal 6-step
+# progression.
+LOCK_LABEL_L = "親情"
+LOCK_ROMAN_L = "Coda"
+LOCK_ROT_L = 180
+
 # Favorability thresholds per character (system_prompt.md <Phases>).
 # Matthias paces evenly (20/20/20/15/15/11); Ating and Lia share a faster,
 # unevenly-spaced table for bands 3-6 (15/15/15/16) - NOT the same as
-# Matthias's, even though bands 1-2 happen to coincide (0-19/20-39).
+# Matthias's, even though bands 1-2 happen to coincide (0-19/20-39). These
+# numeric bands still apply to Lia even while locked (M/T/L are always
+# output as plain 0-100 numbers per Output_Format) - the lock state is an
+# independent override on top, driven by LABEL, not a replacement for the
+# numeric parsing.
 THRESHOLDS = {
     "m": [(0, 19), (20, 39), (40, 59), (60, 74), (75, 89), (90, 100)],
     "t": [(0, 19), (20, 39), (40, 54), (55, 69), (70, 84), (85, 100)],
@@ -174,16 +212,29 @@ PHASE_POS_STYLE = {
     6: "top:25%;left:-2%;",
 }
 
-def build_wheel_section(ch, name_seed):
+def build_wheel_section(ch, name_seed, note_group):
+    """`note_group` is the $-placeholder for this turn's captured [WHEEL]
+    NOTE text (identical across all 3 sections - only the one whose marker
+    is active ever becomes visible, so reusing the same capture is safe)."""
     p = PHASE[ch]
     band_divs = "".join(
         f'<div class="bd-{ch}-{i+1}">'
         f'<span style="display:block;color:#a57d4e;font:italic 500 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.12em;">{p["roman"]} {num}</span>'
         f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{label}</strong>'
-        f'<small style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note}</small>'
+        f'<small class="nt-dyn" style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note_group}</small>'
+        f'<small class="nt-static" style="display:none;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note}</small>'
         f'</div>'
         for i, (num, label, note) in enumerate(p["bands"])
     )
+    lock_div = ""
+    if ch == "l":
+        lock_div = (
+            f'<div class="bd-l-lock" style="display:none">'
+            f'<span style="display:block;color:#a57d4e;font:italic 500 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.12em;">{LOCK_ROMAN_L}</span>'
+            f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{LOCK_LABEL_L}</strong>'
+            f'<small style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note_group}</small>'
+            f'</div>'
+        )
     # 6 clickable positions around the ring, letting the player browse all
     # six phases for this character - independent of the avatar-switch and
     # the marker-driven "current" default. Each radio is wrapped inside its
@@ -211,7 +262,7 @@ def build_wheel_section(ch, name_seed):
 <div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);color:#ecd39f;font-size:12px;">◆</div>
 </div>
 <div class="rt-wheel-center-{ch}" style="position:absolute;z-index:5;inset:30.2%;display:grid;place-items:center;border:1px solid rgba(221,182,114,.7);border-radius:50%;background:radial-gradient(circle,rgba(99,39,58,.52),rgba(28,15,24,.98) 68%);box-shadow:inset 0 0 0 5px rgba(29,16,25,.95),inset 0 0 0 6px rgba(190,145,85,.42),0 0 22px rgba(121,42,69,.27);text-align:center;">
-<div style="max-width:84%;">{band_divs}</div>
+<div style="max-width:84%;">{band_divs}{lock_div}</div>
 </div>
 {phase_labels}
 </section>'''
@@ -225,16 +276,35 @@ def wheel_css(ch):
             f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-pointer-{ch} {{ transform: rotate({rot}deg); }}\n'
             f'.mk-{ch}{n}:not(:empty) ~ .char-{ch} .rt-wheel-center-{ch} .bd-{ch}-{n} {{ display: block; }}'
         )
+    if ch == "l":
+        # Lia's 7th, MVU-driven "locked" state (see module docstring). Placed
+        # after the 6 default-band rules above so it wins the cascade over
+        # them on an equal-specificity tie (last rule wins) - i.e. it
+        # overrides whatever the numeric band alone would have shown -
+        # while still losing to the phase-ring-click rules appended below,
+        # which come later still.
+        rules.append(
+            f'.mk-l-lock:not(:empty) ~ .char-l .rt-pointer-l {{ transform: rotate({LOCK_ROT_L}deg); }}\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-1,\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-2,\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-3,\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-4,\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-5,\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-6 { display: none; }\n'
+            '.mk-l-lock:not(:empty) ~ .char-l .rt-wheel-center-l .bd-l-lock { display: block; }'
+        )
     # phase-browsing overrides: once ANY of this wheel's 6 positions is
-    # clicked, blanket-hide all 6 band divs, then re-show only the clicked
-    # one (higher specificity via the extra .p{pos} class wins the tie).
+    # clicked, blanket-hide all 6 band divs (plus, for Lia, the lock div) ,
+    # then re-show only the clicked one (higher specificity via the extra
+    # .p{pos} class wins the tie).
+    lock_hide = ',\n.char-l:has(.rt-phase-radio:checked) .rt-wheel-center-l .bd-l-lock' if ch == "l" else ''
     rules.append(
         f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-1,\n'
         f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-2,\n'
         f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-3,\n'
         f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-4,\n'
         f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-5,\n'
-        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-6 {{ display: none; }}'
+        f'.char-{ch}:has(.rt-phase-radio:checked) .rt-wheel-center-{ch} .bd-{ch}-6{lock_hide} {{ display: none; }}'
     )
     for pos in range(1, 7):
         band = POS_TO_BAND[pos]
@@ -366,6 +436,18 @@ def main():
 .rt-title-rule { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; width: min(100%,240px); margin: 13px auto 0; color: #c59a5c; }
 .rt-title-rule i { display: block; height: 5px; border-top: 1px solid rgba(201,160,96,.7); border-bottom: 1px solid rgba(117,55,68,.85); }
 .rt-synopsis { position: relative; z-index: 3; margin: 0 0 18px; padding: 13px 16px; color: #cbb9aa; text-align: center; font-size: 12px; line-height: 1.9; letter-spacing: .05em; }
+
+/* "current phase" note vs. "browsing the phase index" note - see
+   build_wheel_section()/wheel_css() in this script. Default: this turn's
+   freshly-captured note is what's on screen. Once the player clicks any of
+   the 6 ring positions to browse, every wheel-section's band flips to
+   showing the fixed table description instead (handled per-character below,
+   keyed off the same :has(.rt-phase-radio:checked) already used for the
+   ring-click feature itself). */
+.nt-static { display: none; }
+.nt-dyn { display: block; }
+.char-m:has(.rt-phase-radio:checked) .nt-static, .char-t:has(.rt-phase-radio:checked) .nt-static, .char-l:has(.rt-phase-radio:checked) .nt-static { display: block; }
+.char-m:has(.rt-phase-radio:checked) .nt-dyn, .char-t:has(.rt-phase-radio:checked) .nt-dyn, .char-l:has(.rt-phase-radio:checked) .nt-dyn { display: none; }
 '''
 
     # Avatar-switch selection logic uses :has() rather than id/for or bare
@@ -392,7 +474,7 @@ def main():
 .rt-av small { display: block; color: #cbb9aa; font-size: 10px; letter-spacing: .1em; }
 
 .rt-wheel-section { display: none; }
-''' + bd_hide_selector + ''' { display: none; }
+''' + bd_hide_selector + ''', .bd-l-lock { display: none; }
 .rt-fm-m:not(:empty) ~ .rt-wheel-section.char-m,
 .rt-fm-t:not(:empty) ~ .rt-wheel-section.char-t,
 .rt-fm-l:not(:empty) ~ .rt-wheel-section.char-l { display: block; }
@@ -438,6 +520,17 @@ def main():
 .rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-pose-row.stat-t,
 .rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-pose-row.stat-l { display: grid; }
 
+.rt-voice-row.stat-m, .rt-voice-row.stat-t, .rt-voice-row.stat-l { display: none; }
+.rt-fm-m:not(:empty) ~ .rt-footer .rt-voice-row.stat-m,
+.rt-fm-t:not(:empty) ~ .rt-footer .rt-voice-row.stat-t,
+.rt-fm-l:not(:empty) ~ .rt-footer .rt-voice-row.stat-l { display: block; }
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-voice-row.stat-m,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-voice-row.stat-t,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-voice-row.stat-l { display: none; }
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-footer .rt-voice-row.stat-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-voice-row.stat-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-voice-row.stat-l { display: block; }
+
 .rt-fm-m:not(:empty) ~ .rt-footer .stat-m,
 .rt-fm-t:not(:empty) ~ .rt-footer .stat-t,
 .rt-fm-l:not(:empty) ~ .rt-footer .stat-l,
@@ -460,6 +553,12 @@ def main():
 .rt-fm-m:not(:empty) ~ .rt-footer .rt-seal-m,
 .rt-fm-t:not(:empty) ~ .rt-footer .rt-seal-t,
 .rt-fm-l:not(:empty) ~ .rt-footer .rt-seal-l { display: block; }
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-seal-m,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-seal-t,
+.rt-focus-switch:has(.rt-focus-radio:checked) ~ .rt-footer .rt-seal-l { display: none; }
+.rt-focus-switch:has(.av-m input:checked) ~ .rt-footer .rt-seal-m,
+.rt-focus-switch:has(.av-t input:checked) ~ .rt-footer .rt-seal-t,
+.rt-focus-switch:has(.av-l input:checked) ~ .rt-footer .rt-seal-l { display: block; }
 '''
 
     # base chrome for the 6 clickable phase-position labels on each wheel
@@ -501,8 +600,10 @@ def main():
     # (system_prompt.md's <Output_Format> spec: "FOCUS: 今日焦點・（本輪主導角色）"),
     # so that prefix belongs in the fixed part of the pattern, not inside the
     # capture group - otherwise every place that reuses $1 (the headcard's
-    # own "今日焦點・$1" line, and the new kicker below) ends up showing the
-    # prefix twice.
+    # own focus line, and the kicker) ends up showing the prefix twice.
+    # Structural captions (TIME/LOCATION/WEATHER/FOCUS) are English; the
+    # values themselves ($1, $3, $4, $5 etc.) stay whatever language the
+    # story is written in.
     head_find = (
         r"\[HEAD\]\r?\nFOCUS:\s*今日焦點・(.*?)\r?\n"
         r"CHAPTER:\s*(.*?)\r?\nTIME:\s*(.*?)\r?\nLOC:\s*(.*?)\r?\nWEATHER:\s*(.*?)\r?\nLEAD:\s*(.*?)\r?\n"
@@ -526,54 +627,69 @@ def main():
         '<div class="rt-frame rt-frame-head" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
         f'{frame_corners}'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">今日焦點・$1</div>'
+        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">FOCUS · $1</div>'
         '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$2</div></div>'
         '<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px 20px;padding:13px 0 12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">時間</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$3</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">地點</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">氣候</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">TIME</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$3</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">LOCATION</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
+        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">WEATHER</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$6</span></div></div>'
     )
 
-    # who-is-focus markers now come from [WHEEL]'s LABEL (18 words, unique
-    # per character - see head_find above for why FOCUS itself isn't safe
-    # to use for this).
+    # LABEL now has 19 possible words: the 18 normal phase words, plus
+    # Lia's lock word (見 module docstring / system_prompt.md <Lia_Lock>).
+    # Groups: 1-6 = m, 7-12 = t, 13-18 = l (normal), 19 = l (locked).
     LABEL_WORDS = {ch: [label for _, label, _ in PHASE[ch]["bands"]] for ch in ("m", "t", "l")}
-    label_alt = "(?:" + "|".join(f"({w})" for ch in ("m", "t", "l") for w in LABEL_WORDS[ch]) + ")"
+    label_alt = "(?:" + "|".join(
+        [f"({w})" for w in LABEL_WORDS["m"]]
+        + [f"({w})" for w in LABEL_WORDS["t"]]
+        + [f"({w})" for w in LABEL_WORDS["l"]]
+        + [f"({LOCK_LABEL_L})"]
+    ) + ")"
 
     wheel_foot_find = (
-        r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*" + label_alt + r"\r?\nNOTE:\s*.*?\r?\n\[\/WHEEL\]\r?\n\r?\n"
+        r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*" + label_alt + r"\r?\nNOTE:\s*(.*?)\r?\n\[\/WHEEL\]\r?\n\r?\n"
         r"\[FOOT\]\r?\nSCENE:\s*(.*?)\r?\nACT:\s*(.*?)\r?\nCLOCK:\s*(.*?)\r?\n"
         rf"M:\s*{band_regex('m')}\r?\n"
         rf"T:\s*{band_regex('t')}\r?\n"
         rf"L:\s*{band_regex('l')}\r?\n"
         r"HEAT:\s*(.*?)\r?\nU_WEAR:\s*(.*?)\r?\nM_WEAR:\s*(.*?)\r?\nT_WEAR:\s*(.*?)\r?\nL_WEAR:\s*(.*?)\r?\n"
         r"U_POSE:\s*(.*?)\r?\nM_POSE:\s*(.*?)\r?\nT_POSE:\s*(.*?)\r?\nL_POSE:\s*(.*?)\r?\n"
-        r"VOICE:\s*(.*?)\r?\nMOOD:\s*(.*?)\r?\n\[\/FOOT\]"
+        r"M_VOICE:\s*(.*?)\r?\nT_VOICE:\s*(.*?)\r?\nL_VOICE:\s*(.*?)\r?\n"
+        r"MOOD:\s*(.*?)\r?\n\[\/FOOT\]"
     )
-    # groups: 1-6 LABEL=m words, 7-12 LABEL=t words, 13-18 LABEL=l words
-    #         19 SCENE 20 ACT 21 CLOCK
-    #         22-27 M bands  28-33 T bands  34-39 L bands
-    #         40 HEAT
-    #         41 U_WEAR 42 M_WEAR 43 T_WEAR 44 L_WEAR
-    #         45 U_POSE 46 M_POSE 47 T_POSE 48 L_POSE
-    #         49 VOICE 50 MOOD
-    MVAL = "$22$23$24$25$26$27"
-    TVAL = "$28$29$30$31$32$33"
-    LVAL = "$34$35$36$37$38$39"
+    # groups: 1-6 LABEL=m words, 7-12 LABEL=t words, 13-18 LABEL=l words,
+    #         19 LABEL=l locked word
+    #         20 NOTE (this turn's dynamic phase description)
+    #         21 SCENE 22 ACT 23 CLOCK
+    #         24-29 M bands  30-35 T bands  36-41 L bands
+    #         42 HEAT
+    #         43 U_WEAR 44 M_WEAR 45 T_WEAR 46 L_WEAR
+    #         47 U_POSE 48 M_POSE 49 T_POSE 50 L_POSE
+    #         51 M_VOICE 52 T_VOICE 53 L_VOICE
+    #         54 MOOD
+    NOTE_GROUP = "$20"
+    MVAL = "$24$25$26$27$28$29"
+    TVAL = "$30$31$32$33$34$35"
+    LVAL = "$36$37$38$39$40$41"
 
     def marker_block(ch, group_start):
         return "".join(f'<i class="mk-{ch} mk-{ch}{i+1}" style="display:none">${group_start+i}</i>' for i in range(6))
 
     fm_m = "".join(f"${i}" for i in range(1, 7))
     fm_t = "".join(f"${i}" for i in range(7, 13))
-    fm_l = "".join(f"${i}" for i in range(13, 19))
+    fm_l = "".join(f"${i}" for i in range(13, 20))  # 13-18 normal + 19 locked
     focus_markers = (
         f'<i class="rt-fm rt-fm-m" style="display:none">{fm_m}</i>'
         f'<i class="rt-fm rt-fm-t" style="display:none">{fm_t}</i>'
         f'<i class="rt-fm rt-fm-l" style="display:none">{fm_l}</i>'
     )
-    markers_all = focus_markers + marker_block("m", 22) + marker_block("t", 28) + marker_block("l", 34)
+    lock_marker = '<i class="mk-l-lock" style="display:none">$19</i>'
+    markers_all = (
+        focus_markers
+        + marker_block("m", 24) + marker_block("t", 30) + marker_block("l", 36)
+        + lock_marker
+    )
 
     RADIO_NAME = f"rt-focus-{MVAL}{TVAL}{LVAL}"  # see switch_css comment above
     avatar_switch = (
@@ -585,36 +701,36 @@ def main():
     )
 
     wheels_html = (
-        build_wheel_section("m", MVAL)
-        + build_wheel_section("t", TVAL)
-        + build_wheel_section("l", LVAL)
+        build_wheel_section("m", MVAL, NOTE_GROUP)
+        + build_wheel_section("t", TVAL, NOTE_GROUP)
+        + build_wheel_section("l", LVAL, NOTE_GROUP)
     )
 
     footer_html = f'''<footer class="rt-footer rt-frame rt-frame-foot" aria-label="角色狀態尾卡" style="width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;">
 {frame_corners}
 <details class="rt-footer-details" open>
 <summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
-<span>$19</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$20</span><span style="text-align:right;">$21</span>
+<span>$21</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$22</span><span style="text-align:right;">$23</span>
 </summary>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:14px 0 13px;">
 <div class="rt-status-line stat-m" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">馬提亞斯</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{MVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{MVAL}</span></div>
 <div class="rt-status-line stat-t" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">阿霆</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{TVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{TVAL}</span></div>
 <div class="rt-status-line stat-l" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">Lia</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{LVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{LVAL}</span></div>
-<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">心動震盪</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$40%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$40</span></div>
+<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">HEAT</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$42%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$42</span></div>
 </div>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
-<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$41</span></div>
-<div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$42</span></div>
-<div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$43</span></div>
-<div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$44</span></div>
+<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">YOU</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$43</span></div>
+<div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$44</span></div>
+<div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$45</span></div>
+<div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$46</span></div>
 </div>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
-<div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">你</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$45</span></div>
-<div class="rt-pose-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$46</span></div>
-<div class="rt-pose-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$47</span></div>
-<div class="rt-pose-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$48</span></div>
+<div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">YOU</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$47</span></div>
+<div class="rt-pose-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$48</span></div>
+<div class="rt-pose-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$49</span></div>
+<div class="rt-pose-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$50</span></div>
 </div>
-<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">心事：</b>$49</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$50</div></div></div>
+<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div class="rt-voice-row stat-m" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$51</div><div class="rt-voice-row stat-t" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$52</div><div class="rt-voice-row stat-l" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$53</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$54</div></div></div>
 </details>
 </footer>'''
 
