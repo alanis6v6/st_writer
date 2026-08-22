@@ -8,9 +8,15 @@
 | `RT_正文` | `[BODY]...[/BODY]` |
 | `RT_花冠尾卡` | `[WHEEL]...[/WHEEL]` 到 `[FOOT]...[/FOOT]`（兩個標籤一起吃，因為花冠需要讀到尾卡裡的好感度數字） |
 
+加上 `scripts_minigames.json`（記憶配對／探索發現兩個小遊戲，來自另一輪測試，格式相同可直接合併）。
+
 ## 運作方式
 
 - 三個角色的花冠六階段文字（羅馬數字／階段名／備註）全部固定寫死在 regex 裡，**目前是第幾階段完全靠 `M:`／`T:`／`L:` 的數字用正規表達式的數字範圍比對算出來**，不需要 AI 每輪額外輸出。
+- ⚠️ **門檻不是三人共用同一組**：馬提亞斯是 0-19/20-39/40-59/60-74/75-89/90-100，
+  阿霆與 Lia 是 0-19/20-39/**40-54/55-69/70-84/85-100**（後段切得比較密）。
+  `build_wheel_footer.py` 裡的 `THRESHOLDS` 字典分開定義，`int_range_regex()` 用純
+  數字比對（不是算術）產生對應的 regex——改門檻只要改這個字典，不要手動兜 regex。
 - 頭像列（點頭像切換要看誰的花冠與衣著）預設停在 `[HEAD]` 的 `FOCUS:` 欄位指定的那個人身上；點擊哪個頭像由 CSS radio + `:not(:empty)` 技巧驅動，沒有 JavaScript。
 - 尾卡包在 `<details>` 裡，可以收合。
 
@@ -26,7 +32,7 @@ python3 build_wheel_footer.py
 
 ## 測試
 
-`simulate.py` 用 Python 模擬 SillyTavern 的 `String.replace($1$2...)` 行為，對 13 組好感度邊界值（0/19/20/39/40/59/60/74/75/89/90/100）＋ 5 個開局的真實內容跑過，確認花冠階段判定、頭像預設焦點、HTML 標籤配對都正確：
+`simulate.py` 用 Python 模擬 SillyTavern 的 `String.replace($1$2...)` 行為，對每個角色各自的 18 組好感度邊界值＋ 5 個開局的真實內容跑過，確認花冠階段判定（含馬提亞斯與阿霆／Lia 不同的門檻表）、頭像預設焦點、HTML 標籤配對都正確：
 
 ```
 python3 simulate.py
@@ -38,6 +44,8 @@ python3 simulate.py
 
 ## 尚未整合進來的部分
 
-- `[MEMORY]`／`[FIND]` 兩個小遊戲的 regex（另外在 `/tmp` 的 scratchpad 測試過，還沒搬進本資料夾）
-- 自訂開局選單
-- 最終組裝成單一 `chara_card_v3` JSON
+- 自訂開局選單（第六個開局的輸入介面）
+- 卡片封面圖
+
+這兩個資料夾以外的東西（連同這裡的五條 regex）已經組裝成單一 `chara_card_v3` JSON，
+見上一層目錄的 `assemble_card.py` 與 `gender_is_not_the_limit.json`。

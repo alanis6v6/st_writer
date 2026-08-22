@@ -21,8 +21,9 @@
   4. ✅ 《他今天提早回家》— 馬提亞斯撞見，逃得很狼狽（openings/04_caught.md）
   5. ✅ 《遙控器在他手上》— 已確認關係，約會前的跳蛋提議（openings/05_remote.md）
   ※ 全數由使用者提供正文並整合，[WHEEL] 已依六階段系統校正、[FOOT] 已補上四人衣著欄位
-- [ ] 第六個選項：自訂開局的輸入介面（HTML 選單 + regex）
-- [ ] `description` / `personality` / `scenario` / `mes_example`
+- [ ] 第六個選項：自訂開局的輸入介面（HTML 選單 + regex）——目前匯入版只有五個固定
+      開局（酒館原生的 swipe 替代開場），還沒有自訂欄位
+- [x] `description` / `personality` / `scenario` / `mes_example`（第一版，待總校）
 - [ ] 卡片封面圖（酒館列表顯示用，與尾卡頭像是不同的東西）
 
 ### 機制
@@ -36,15 +37,27 @@
       所有開局的 [FOOT] 已補上四個衣著欄位
 - [x] 花冠＋尾卡改為「點頭像切換角色狀態」：三人花冠與尾卡衣著都做成可切換，
       預設停在當輪 FOCUS 角色身上，好感度→花冠階段用 regex 數字範圍比對算出來，
-      不需要 AI 每輪額外輸出。第一版 regex 已產出：`regex/scripts_wheel_footer.json`
+      不需要 AI 每輪額外輸出。regex 已產出：`regex/scripts_wheel_footer.json`
       （產生腳本 `regex/build_wheel_footer.py`，測試腳本 `regex/simulate.py`）
-- [ ] 兩條小遊戲 regex（記憶配對／探索發現）搬進 `regex/` 資料夾並整合進同一份 JSON
-- [ ] 開局選單 regex（第六個自訂開局的觸發介面）
-- [ ] regex 完整打包成最終單一 JSON（頭卡／正文／花冠尾卡／兩條小遊戲／開局選單）
+- [x] ⚠️ 組裝過程中發現並修正一個真的算錯的 bug：`regex/build_wheel_footer.py`
+      原本讓阿霆／Lia 沿用馬提亞斯的六階段門檻（0-19/20-39/40-59/60-74/75-89/90-100），
+      但 `system_prompt.md`／`worldbook.md` 的 14_變量更新腦 寫的其實是
+      40-54/55-69/70-84/85-100（不是 40-59/60-74/75-89/90-100）。已改成每個角色
+      各自的門檻表，並連帶修正 `openings/02_lia_rain.md`（貼近→明示，ROT0→60）
+      與 `openings/03_eighteen.md`（認輸→重來，ROT120→180）這兩處算錯的 [WHEEL]。
+- [x] 兩條小遊戲 regex（記憶配對／探索發現）搬進 `regex/scripts_minigames.json`
+- [x] regex 完整打包成最終單一 JSON（頭卡／正文／花冠尾卡／兩條小遊戲）
+- [ ] 開局選單 regex（第六個自訂開局的觸發介面——目前用酒館原生的
+      `alternate_greetings` 放五個開局，還沒有自訂輸入欄位）
 
 ### 收尾
-- [ ] 組裝成單一 `chara_card_v3` JSON
-- [ ] Stage 6 全卡文風與用詞總校
+- [x] 組裝成單一 `chara_card_v3` JSON：`gender_is_not_the_limit.json`
+      （產生腳本 `assemble_card.py`，讀 system_prompt.md／worldbook.md／
+      openings/*.md／regex/*.json，不要手改輸出的 JSON）
+- [ ] 卡片封面圖
+- [ ] 第六個自訂開局選單
+- [ ] Stage 6 全卡文風與用詞總校（`description`/`personality`/`scenario`/`mes_example`
+      是這次組裝時新寫的第一版，還沒有跟其他內容一起總校過）
 - [ ] Stage 8 試玩模擬 20 頁（用技能的 `playtest_engine.py`）
 
 ## 卡在外部資訊的項目

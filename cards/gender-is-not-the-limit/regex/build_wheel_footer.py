@@ -92,6 +92,45 @@ PHASE = {
 }
 BAND_ROT = [240, 300, 0, 60, 120, 180]
 
+# Favorability thresholds per character (system_prompt.md <Phases>).
+# Matthias paces evenly (20/20/20/15/15/11); Ating and Lia share a faster,
+# unevenly-spaced table for bands 3-6 (15/15/15/16) - NOT the same as
+# Matthias's, even though bands 1-2 happen to coincide (0-19/20-39).
+THRESHOLDS = {
+    "m": [(0, 19), (20, 39), (40, 59), (60, 74), (75, 89), (90, 100)],
+    "t": [(0, 19), (20, 39), (40, 54), (55, 69), (70, 84), (85, 100)],
+    "l": [(0, 19), (20, 39), (40, 54), (55, 69), (70, 84), (85, 100)],
+}
+
+def int_range_regex(lo, hi):
+    """Build a regex alternation (no arithmetic, pure digit-pattern matching)
+    that matches any integer string in [lo, hi], for 0 <= lo <= hi <= 100."""
+    parts = []
+    if lo <= 9:
+        upper = min(hi, 9)
+        parts.append('[0-9]' if (lo == 0 and upper == 9) else f'[{lo}-{upper}]')
+        lo = 10
+    if lo <= hi:
+        hi_, include_100 = (99, True) if hi == 100 else (hi, False)
+        if lo <= hi_:
+            tens_lo, tens_hi = lo // 10, hi_ // 10
+            for t in range(tens_lo, tens_hi + 1):
+                d_lo = lo - t * 10 if t == tens_lo else 0
+                d_hi = hi_ - t * 10 if t == tens_hi else 9
+                if d_lo == 0 and d_hi == 9:
+                    parts.append(f'{t}[0-9]')
+                elif d_lo == d_hi:
+                    parts.append(f'{t}{d_lo}')
+                else:
+                    parts.append(f'{t}[{d_lo}-{d_hi}]')
+        if include_100:
+            parts.append('100')
+    return '|'.join(parts)
+
+def band_regex(ch):
+    """6 capturing groups, one per favorability band, for character ch."""
+    return "(?:" + "|".join(f"({int_range_regex(lo, hi)})" for lo, hi in THRESHOLDS[ch]) + ")"
+
 WHEEL_BG_SVG = (
     '<svg viewBox="0 0 400 400" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;">'
     '<defs><radialGradient id="rtgW{X}" cx="50%" cy="48%" r="52%">'
@@ -292,14 +331,12 @@ def main():
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$8</span></div></div>'
     )
 
-    band_re = r"(?:([0-9]|1[0-9])|(2[0-9]|3[0-9])|(4[0-9]|5[0-9])|(6[0-9]|7[0-4])|(7[5-9]|8[0-9])|(9[0-9]|100))"
-
     wheel_foot_find = (
         r"\[WHEEL\]\r?\nROT:\s*.*?\r?\nROMAN:\s*.*?\r?\nLABEL:\s*.*?\r?\nNOTE:\s*.*?\r?\n\[\/WHEEL\]\r?\n\r?\n"
         r"\[FOOT\]\r?\nSCENE:\s*(.*?)\r?\nACT:\s*(.*?)\r?\nCLOCK:\s*(.*?)\r?\n"
-        rf"M:\s*{band_re}\r?\n"
-        rf"T:\s*{band_re}\r?\n"
-        rf"L:\s*{band_re}\r?\n"
+        rf"M:\s*{band_regex('m')}\r?\n"
+        rf"T:\s*{band_regex('t')}\r?\n"
+        rf"L:\s*{band_regex('l')}\r?\n"
         r"HEAT:\s*(.*?)\r?\nU_WEAR:\s*(.*?)\r?\nM_WEAR:\s*(.*?)\r?\nT_WEAR:\s*(.*?)\r?\nL_WEAR:\s*(.*?)\r?\n"
         r"VOICE:\s*(.*?)\r?\nMOOD:\s*(.*?)\r?\n\[\/FOOT\]"
     )

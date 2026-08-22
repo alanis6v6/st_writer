@@ -38,13 +38,16 @@ def js_replace(pattern, repl_template, text):
 def error_type():
     return re.error
 
-def apply_all_scripts(text, scripts):
+def apply_all_scripts(text, scripts, quiet=False):
     for s in scripts:
         if s.get("disabled"):
             continue
         text, matched = js_replace(s["findRegex"], s["replaceString"], text)
-        status = "matched" if matched else "NO MATCH"
-        print(f"  [{s['scriptName']}] {status}")
+        if not quiet:
+            status = "matched" if matched else "NO MATCH"
+            print(f"  [{s['scriptName']}] {status}")
+        elif not matched:
+            print(f"  [{s['scriptName']}] NO MATCH")
     return text
 
 def make_sample(m, t, l, focus="馬提亞斯"):
@@ -84,20 +87,19 @@ VOICE: 測試心事。
 MOOD: 測試心情
 [/FOOT]"""
 
-def band_index_from_value(v):
+# Must mirror THRESHOLDS in build_wheel_footer.py - Matthias paces evenly,
+# Ating/Lia share a different (uneven) table for bands 3-6.
+THRESHOLDS = {
+    "m": [(0, 19), (20, 39), (40, 59), (60, 74), (75, 89), (90, 100)],
+    "t": [(0, 19), (20, 39), (40, 54), (55, 69), (70, 84), (85, 100)],
+    "l": [(0, 19), (20, 39), (40, 54), (55, 69), (70, 84), (85, 100)],
+}
+
+def band_index_from_value(v, ch):
     v = int(v)
-    if 0 <= v <= 19:
-        return 1
-    if 20 <= v <= 39:
-        return 2
-    if 40 <= v <= 59:
-        return 3
-    if 60 <= v <= 74:
-        return 4
-    if 75 <= v <= 89:
-        return 5
-    if 90 <= v <= 100:
-        return 6
+    for i, (lo, hi) in enumerate(THRESHOLDS[ch], start=1):
+        if lo <= v <= hi:
+            return i
     raise ValueError(v)
 
 def check_output(html, ch, expected_band, char_label_map):
@@ -117,19 +119,23 @@ def check_output(html, ch, expected_band, char_label_map):
 def main():
     scripts = json.load(open(SCRIPTS_PATH, encoding="utf-8"))
 
-    test_values = [0, 5, 19, 20, 39, 40, 59, 60, 74, 75, 89, 90, 100]
+    # boundary values that matter for at least one character's table:
+    # 0/19/20/39/40/54/55/59/60/69/70/74/75/84/85/89/90/100
+    test_values = [0, 19, 20, 39, 40, 54, 55, 59, 60, 69, 70, 74, 75, 84, 85, 89, 90, 100]
     all_ok = True
-    for v in test_values:
-        expected = band_index_from_value(v)
-        sample = make_sample(m=v, t=v, l=v, focus="馬提亞斯")
-        print(f"--- M=T=L={v} (expected band {expected}) ---")
-        html = apply_all_scripts(sample, scripts)
-        for ch in ("m", "t", "l"):
+    for ch in ("m", "t", "l"):
+        for v in test_values:
+            expected = band_index_from_value(v, ch)
+            vals = {"m": 50, "t": 50, "l": 50}
+            vals[ch] = v
+            sample = make_sample(m=vals["m"], t=vals["t"], l=vals["l"], focus="馬提亞斯")
+            html = apply_all_scripts(sample, scripts, quiet=True)
             ok_count, ok_band, shown = check_output(html, ch, expected, None)
             status = "OK" if (ok_count and ok_band) else "FAIL"
             if status == "FAIL":
                 all_ok = False
-            print(f"    {ch}: shown={shown} -> {status}")
+                print(f"--- {ch}={v} (expected band {expected}) --- shown={shown} -> {status}")
+    print(f"boundary sweep: {len(test_values)*3} checks run, {'all OK' if all_ok else 'FAILURES ABOVE'}")
 
     # check the "who is focus -> which avatar defaults active" marker
     print("\n--- focus-marker check (阿霆 focus) ---")
