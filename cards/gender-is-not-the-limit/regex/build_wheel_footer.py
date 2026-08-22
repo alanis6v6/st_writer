@@ -174,7 +174,7 @@ PHASE_POS_STYLE = {
     6: "top:25%;left:-2%;",
 }
 
-def build_wheel_section(ch):
+def build_wheel_section(ch, name_seed):
     p = PHASE[ch]
     band_divs = "".join(
         f'<div class="bd-{ch}-{i+1}">'
@@ -190,10 +190,18 @@ def build_wheel_section(ch):
     # own <label> (no id/for - see switch_css comment on why) and the CSS
     # keys off the label's own p1..p6 class via :has(), not nth-of-type,
     # since nth-of-type can't distinguish radios that each live inside a
-    # different parent <label>.
+    # different parent <label>. All 6 MUST share one `name` - without it,
+    # unnamed radios aren't grouped as mutually exclusive at all (each one
+    # toggles independently), so clicking a new position never unchecked the
+    # previous one and every previously-clicked band div stayed visible,
+    # stacking up instead of being replaced (the "text keeps getting longer"
+    # bug). `name` is seeded with this message's own favorability value the
+    # same way RADIO_NAME is below, to cut down (not eliminate) cross-message
+    # radio-group crosstalk, since `name` grouping is page-global.
+    phase_radio_name = f"rt-phase-{ch}-{name_seed}"
     phase_labels = "".join(
         f'<label class="rt-phase p{pos}" style="{PHASE_POS_STYLE[pos]}">'
-        f'<input type="radio" class="rt-phase-radio">{p["bands"][POS_TO_BAND[pos]-1][1]}</label>'
+        f'<input type="radio" name="{phase_radio_name}" class="rt-phase-radio">{p["bands"][POS_TO_BAND[pos]-1][1]}</label>'
         for pos in range(1, 7)
     )
     return f'''<section class="rt-wheel-section char-{ch}" aria-label="{AV_NAME[ch]}・情感命運花冠" style="position:relative;width:min(100%,340px);aspect-ratio:1;margin:0 auto 18px;font-family:'Noto Serif TC','Songti TC',serif;">
@@ -576,7 +584,11 @@ def main():
         '</div>'
     )
 
-    wheels_html = build_wheel_section("m") + build_wheel_section("t") + build_wheel_section("l")
+    wheels_html = (
+        build_wheel_section("m", MVAL)
+        + build_wheel_section("t", TVAL)
+        + build_wheel_section("l", LVAL)
+    )
 
     footer_html = f'''<footer class="rt-footer rt-frame rt-frame-foot" aria-label="角色狀態尾卡" style="width:min(100%,420px);margin:0 auto 14px;padding:17px 21px 18px;">
 {frame_corners}

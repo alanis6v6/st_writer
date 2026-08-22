@@ -214,7 +214,7 @@ def main():
     sample = make_sample(m=50, t=50, l=50)
     html_phase = apply_all_scripts(sample, scripts, quiet=True)
     phase_labels = re.findall(
-        r'<label class="rt-phase p(\d)"[^>]*><input type="radio" class="rt-phase-radio">([^<]*)</label>',
+        r'<label class="rt-phase p(\d)"[^>]*><input type="radio"[^>]*class="rt-phase-radio">([^<]*)</label>',
         html_phase,
     )
     print(f"  found {len(phase_labels)} phase-radio labels (expect 18)")
@@ -243,6 +243,29 @@ def main():
                 print("  missing CSS rule:", needle)
     print("  phase-click CSS rotate rules present:", css_ok)
     if not css_ok:
+        all_ok = False
+
+    # regression check for the "clicking a new phase doesn't clear the old
+    # one, text keeps stacking up" bug: all 6 radios for a given character
+    # must share one `name` (otherwise unnamed radios aren't mutually
+    # exclusive at all and every click just adds another :checked one).
+    print("\n--- phase-radio name-grouping check (regression) ---")
+    names_ok = True
+    all_names = re.findall(r'<input type="radio" name="([^"]*)" class="rt-phase-radio">', html_phase)
+    if len(all_names) != 18:
+        names_ok = False
+        print(f"  expected 18 named phase radios, found {len(all_names)}")
+    else:
+        by_char = {"m": all_names[0:6], "t": all_names[6:12], "l": all_names[12:18]}
+        for ch, group in by_char.items():
+            if len(set(group)) != 1:
+                names_ok = False
+                print(f"  ch={ch}: radios don't share one name -> {set(group)}")
+        if len({n for g in by_char.values() for n in g}) != 3:
+            names_ok = False
+            print("  the 3 characters' radio groups are not distinct from each other")
+    print("  all 6 radios per wheel share one name (mutually exclusive):", names_ok)
+    if not names_ok:
         all_ok = False
 
     # tag-balance check on a full sample
