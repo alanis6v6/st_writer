@@ -176,14 +176,36 @@
       實際選中的顏色。純 `system_prompt.md` 文字修改，沒有動到 regex／
       openings，不需要重新產生 `scripts_wheel_footer.json`。
 
+- [x] Stage 6 全卡文風與用詞總校——逐一過了 `description`／`personality`／
+      `scenario`／`mes_example`（組裝時新寫、從未跟其他內容一起校對過的
+      第一版）、`system_prompt.md`、`worldbook.md`、五個開局。用禁用詞彙表、
+      倒裝句、標點符號（「」／……）機械掃過一輪，全數乾淨；另外抓到並修正
+      三個實質問題：
+      1. ⚠️ `description` 稱馬提亞斯為「繼父」，跟 `<World>` 既有設定（他是
+         母親的舊識同僚，出於責任感接手監護，兩人從未結婚）矛盾——已改成
+         「監護人馬提亞斯」。「繼父」保留在世界書的關鍵詞列表裡（玩家口語
+         上可能誤稱，需要能觸發到條目），只是不再出現在描述文字裡當作事實。
+      2. ⚠️ `mes_example` 的 `NOTE` 欄位還寫著「克制下的灼熱凝視」——那正是
+         `<Phases>` 表格裡「隱忍」階段的固定描述，跟同一輪新增的「NOTE 嚴禁
+         抄表格固定描述」規則自相矛盾（範例示範了規則禁止的寫法）。已改成
+         當下情境現寫的一句話。
+      3. 旁白提及陸昀霆改用「昀霆」的規則上一輪只改了五個開局本文，
+         `system_prompt.md` 自己兩處示範性文字（`<Focus_Engine>` 的「多人
+         同場的鐵則」例句、`<Games>` 記憶配對的視線描述範例）跟
+         `worldbook.md`／`assemble_card.py` 裡對應的世界書條目仍寫著
+         「阿霆」，會稀釋規則本身的一致性——已一併改成「昀霆」。
+      另外補上一個 metadata 小疏漏：頂層 `tags` 有「NTR無」但 `data.tags`
+      沒有，兩處已同步。
+      文風本身（分鏡換行、句型節奏、感官錨點、show-don't-tell）在前幾輪
+      重寫開局、system_prompt 時已經對齊過，這輪沒有再發現需要大改的地方。
+
 ### 收尾
 - [x] 組裝成單一 `chara_card_v3` JSON：`gender_is_not_the_limit.json`
       （產生腳本 `assemble_card.py`，讀 system_prompt.md／worldbook.md／
       openings/*.md／regex/*.json，不要手改輸出的 JSON）
 - [ ] 卡片封面圖
 - [ ] 第六個自訂開局選單
-- [ ] Stage 6 全卡文風與用詞總校（`description`/`personality`/`scenario`/`mes_example`
-      是這次組裝時新寫的第一版，還沒有跟其他內容一起總校過）
+- [x] Stage 6 全卡文風與用詞總校（細節見上方「這一輪新增」）
 - [ ] Stage 8 試玩模擬 20 頁（用技能的 `playtest_engine.py`）
 
 ## 卡在外部資訊的項目
