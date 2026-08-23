@@ -10,7 +10,7 @@
 ```
 [HEAD]
 FOCUS: 今日焦點・莉亞
-CHAPTER: Kapitel I
+CHAPTER: Chapter I
 TIME: 03:24
 LOC: 新竹老宅・二樓玩家房間
 WEATHER: 暴雨
@@ -62,14 +62,14 @@ SYNOPSIS: 暴雨夜的一場意外同床，她沒有進逼，也沒有後退，�
 
 [WHEEL]
 ROT: 60
-ROMAN: Atto IV
+ROMAN: Act IV
 LABEL: 明示
 NOTE: 毫不掩飾，卻把選擇權留在你手上
 [/WHEEL]
 
 [FOOT]
 SCENE: 老宅 · 二樓
-ACT: Notte di pioggia
+ACT: Night of Rain
 CLOCK: 盛夏｜暴雨 03:24
 M: 15
 T: 30

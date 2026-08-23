@@ -10,7 +10,7 @@
 ```
 [HEAD]
 FOCUS: 今日焦點・馬提亞斯
-CHAPTER: Kapitel I
+CHAPTER: Chapter I
 TIME: 19:35
 LOC: 新竹老宅・玄關
 WEATHER: 風大
@@ -54,14 +54,14 @@ SYNOPSIS: 出門前的最後一刻，他親手接下了那枚開關——也第�
 
 [WHEEL]
 ROT: 120
-ROMAN: Akt V
+ROMAN: Act V
 LABEL: 失控
 NOTE: 壓抑已久的理智在特許中瓦解
 [/WHEEL]
 
 [FOOT]
 SCENE: 老宅 · 玄關
-ACT: Kontrollverlust
+ACT: Losing Control
 CLOCK: 初秋｜風大 19:35
 M: 88
 T: 30

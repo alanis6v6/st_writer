@@ -171,6 +171,35 @@ python3 simulate.py
   都已同步改用新的三欄位格式，`simulate.py` 新增對應測試（動態 NOTE、Lia
   鎖定 band、心事切換含不在場）並全數通過。
 
+## 這一輪新增：英文結構詞＋花體字、旁白改用「昀霆」
+
+- **德語／義語風格詞全部改成英文**：`CHAPTER`（`Kapitel`→`Chapter`）、`ROMAN`
+  （`build_wheel_footer.py` 的 `PHASE[ch]["roman"]`，`Akt`／`Atto`→統一
+  `Act`）、`ACT` 欄位（每個開局各自的德語／義語場景詞，如 `Mitternacht`→
+  `Midnight`）。`system_prompt.md` 的 `<Output_Format>` 已同步把 `ACT` 的
+  說明從「德語或義語的場景詞」改成「英文的場景詞」。這只影響卡片**結構性**
+  的裝飾詞——馬提亞斯角色本身失控時說德語（`<Language_Rules>`）是完全獨立
+  的角色特徵，沒有被這條規則動到。
+- **卡片上所有英文結構文字改成花體字**：`build_wheel_footer.py` 新增
+  `CURSIVE`／`CURSIVE_MIXED` 兩個 font-family 常數，透過 `FONT_IMPORT`
+  （Google Fonts `@import`，載入 `Parisienne`）套用在 kicker（`$2 · $1`）、
+  頭卡 CHAPTER 徽章、`Focus · $1` 行、`Time`／`Location`／`Weather`／`Heat`／
+  `You`／`Secret:` 這幾個標籤，以及花冠的 `Act I`～`Act VI`（含 Lia 鎖定後的
+  `Coda`）、尾卡 ACT 欄位值。`CURSIVE_MIXED` 多補上 `Noto Serif TC`／
+  `Songti TC` 當 fallback，因為 Parisienne／Cormorant Garamond 都沒有中文
+  字形——瀏覽器的 per-glyph fallback 機制會讓中文字自動跳到後面的中文字體，
+  不需要手動拆 `<span>`。原本 9px 的英文標籤同步微調到 13px 左右，抵銷花體字
+  在極小字級下辨識度變差的問題；若某個 SillyTavern 客戶端擋掉 `@import`
+  （少數會清洗 `<style>` 內容），會優雅退回 Cormorant Garamond→通用 serif，
+  不會整段消失或報錯。
+- **旁白提及陸昀霆一律用「昀霆」，不用「阿霆」**：「阿霆」是別人稱呼他的
+  暱稱，只在對話台詞裡（玩家或其他角色開口叫他時）使用；旁白／敘述句一律
+  寫「昀霆」，跟馬提亞斯／Lia 在旁白裡就是用給定名字的寫法一致。
+  `build_wheel_footer.py` 的 `AV_NAME["t"]` 也同步從 `"阿霆"` 改成
+  `"昀霆"`（影響尾卡狀態列的角色名稱標籤），`system_prompt.md` 新增了
+  明確規則，五個開局檔案的 `[HEAD]`/`[BODY]` 範圍內已全數校過（只有真的
+  在引號裡被稱呼的地方維持「阿霆」）。
+
 ## 尚未整合進來的部分
 
 - 自訂開局選單（第六個開局的輸入介面）

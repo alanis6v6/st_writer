@@ -67,7 +67,7 @@ def make_sample(m, t, l, focus="馬提亞斯", label="隱忍", note="測試備�
     title_block = f"TITLE: {title}\nSUBTITLE: {subtitle}\nSYNOPSIS: {synopsis}\n" if title is not None else ""
     return f"""[HEAD]
 FOCUS: 今日焦點・{focus}
-CHAPTER: Kapitel I
+CHAPTER: Chapter I
 TIME: 19:00
 LOC: 新竹老宅・餐廳
 WEATHER: 起風
@@ -212,12 +212,12 @@ def main():
     )
     html_title = apply_all_scripts(sample_title, scripts, quiet=True)
     flag_populated = re.search(r'class="rt-title-flag" style="display:none">餐桌上的沉默</i>', html_title)
-    has_header = '<div class="rt-kicker">Kapitel I · 馬提亞斯</div><h1>餐桌上的沉默</h1><div class="rt-subtitle">他把未竟之言，都留在多添的那碗湯裡</div>' in html_title
+    has_header = 'Chapter I · 馬提亞斯</div><h1>餐桌上的沉默</h1><div class="rt-subtitle">他把未竟之言，都留在多添的那碗湯裡</div>' in html_title
     has_synopsis = '<p class="rt-synopsis">新竹入秋的晚風從天井灌進老宅' in html_title
     has_shell = '<div class="rt-shell">' in html_title
     has_frame_head = 'class="rt-frame rt-frame-head"' in html_title
     has_frame_foot = 'rt-footer rt-frame rt-frame-foot' in html_title
-    has_focus_caption = 'FOCUS · 馬提亞斯' in html_title
+    has_focus_caption = 'Focus · 馬提亞斯' in html_title
     print("  TITLE given -> flag populated:", bool(flag_populated), "| header html:", has_header,
           "| synopsis:", has_synopsis, "| shell:", has_shell,
           "| frame-head class:", has_frame_head, "| frame-foot class:", has_frame_foot,
@@ -230,7 +230,8 @@ def main():
     sample = make_sample(m=50, t=50, l=50)
     html_cap = apply_all_scripts(sample, scripts, quiet=True)
     captions_ok = True
-    for needle in ["FOCUS · 馬提亞斯", ">TIME<", ">LOCATION<", ">WEATHER<", ">HEAT<", ">YOU<", "SECRET: "]:
+    for needle in ["Focus · 馬提亞斯", ">Time<", ">Location<", ">Weather<", ">Heat<", ">You<", "Secret: ",
+                   "fonts.googleapis.com", "Parisienne"]:
         if needle not in html_cap:
             captions_ok = False
             print(f"  missing caption: {needle!r}")
@@ -245,7 +246,7 @@ def main():
     html_voice = apply_all_scripts(sample, scripts, quiet=True)
     voice_rows_ok = True
     for ch, text in (("m", "馬提亞斯的心事"), ("t", "不在場"), ("l", "不在場")):
-        m = re.search(rf'class="rt-voice-row stat-{ch}"[^>]*><b[^>]*>SECRET: </b>([^<]*)</div>', html_voice)
+        m = re.search(rf'class="rt-voice-row stat-{ch}"[^>]*><b[^>]*>Secret: </b>([^<]*)</div>', html_voice)
         if not (m and m.group(1) == text):
             voice_rows_ok = False
             print(f"  stat-{ch} SECRET row -> expected {text!r}, got {m.group(1) if m else None!r}")

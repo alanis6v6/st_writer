@@ -10,7 +10,7 @@
 ```
 [HEAD]
 FOCUS: 今日焦點・馬提亞斯
-CHAPTER: Kapitel I
+CHAPTER: Chapter I
 TIME: 14:18
 LOC: 新竹老宅・一樓客廳
 WEATHER: 炎熱
@@ -72,14 +72,14 @@ SYNOPSIS: 提早回家的那半秒對視，讓一向從容自律的他，第一�
 
 [WHEEL]
 ROT: 0
-ROMAN: Akt III
+ROMAN: Act III
 LABEL: 隱忍
 NOTE: 戒律與衝動之間的無聲撕裂
 [/WHEEL]
 
 [FOOT]
 SCENE: 老宅 · 客廳
-ACT: Flucht
+ACT: Flight
 CLOCK: 盛夏｜午後 14:18
 M: 42
 T: 30

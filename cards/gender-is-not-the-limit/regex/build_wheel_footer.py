@@ -81,12 +81,30 @@ AVATAR = {
     "t": b64("ating"),
     "l": b64("lia"),
 }
-AV_NAME = {"m": "馬提亞斯", "t": "阿霆", "l": "Lia"}
+AV_NAME = {"m": "馬提亞斯", "t": "昀霆", "l": "Lia"}
+
+# All-English decorative/structural UI text (card chrome captions, chapter
+# badges, wheel act numerals, ACT field value) renders in a script/cursive
+# webface, loaded via Google Fonts @import at the top of the emitted
+# <style> block. Falls back gracefully to the existing elegant italic serif,
+# then a generic serif, if the import doesn't load in a given ST client.
+# Elements that mix English chrome text with Chinese content (e.g. the
+# kicker "$2 · $1") use CURSIVE_MIXED so CJK glyphs - absent from the script
+# font - fall through to the card's normal Chinese serif instead of a bare
+# system default.
+CURSIVE = "'Parisienne', 'Cormorant Garamond', serif"
+CURSIVE_MIXED = "'Parisienne', 'Cormorant Garamond', 'Noto Serif TC', 'Songti TC', serif"
+FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Parisienne&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&display=swap');"
 
 # band index 0..5 = favorability bands 0-19/20-39/40-59/60-74/75-89/90-100
+# `roman` used to be German/Italian ("Akt"/"Atto") per character; now unified
+# to English ("Act") for all three, per the card-wide switch away from
+# German/Italian decorative words in structural UI text (Matthias's actual
+# German dialogue lines are untouched - that's his character trait, a
+# different thing from the card chrome's stylistic language choice).
 PHASE = {
     "m": {
-        "roman": "Akt",
+        "roman": "Act",
         "bands": [
             ("I", "戒備", "用禮貌把心事鎖進抽屜"),
             ("II", "動搖", "不小心多看了一眼，來不及收回"),
@@ -97,7 +115,7 @@ PHASE = {
         ],
     },
     "t": {
-        "roman": "Akt",
+        "roman": "Act",
         "bands": [
             ("I", "裝傻", "刻意不碰舊話題，笑著帶過"),
             ("II", "破功", "提起以前的時候，語氣沒收好"),
@@ -108,7 +126,7 @@ PHASE = {
         ],
     },
     "l": {
-        "roman": "Atto",
+        "roman": "Act",
         "bands": [
             ("I", "疼愛", "長輩式的溫柔，界線清楚"),
             ("II", "試溫", "說一些界線模糊的話，然後看你"),
@@ -219,7 +237,7 @@ def build_wheel_section(ch, name_seed, note_group):
     p = PHASE[ch]
     band_divs = "".join(
         f'<div class="bd-{ch}-{i+1}">'
-        f'<span style="display:block;color:#a57d4e;font:italic 500 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.12em;">{p["roman"]} {num}</span>'
+        f'<span style="display:block;color:#a57d4e;font:500 15px/1 {CURSIVE};letter-spacing:.06em;">{p["roman"]} {num}</span>'
         f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{label}</strong>'
         f'<small class="nt-dyn" style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note_group}</small>'
         f'<small class="nt-static" style="display:none;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note}</small>'
@@ -230,7 +248,7 @@ def build_wheel_section(ch, name_seed, note_group):
     if ch == "l":
         lock_div = (
             f'<div class="bd-l-lock" style="display:none">'
-            f'<span style="display:block;color:#a57d4e;font:italic 500 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.12em;">{LOCK_ROMAN_L}</span>'
+            f'<span style="display:block;color:#a57d4e;font:500 15px/1 {CURSIVE};letter-spacing:.06em;">{LOCK_ROMAN_L}</span>'
             f'<strong style="display:block;margin:5px 0 3px;color:#f0ddc3;font-size:clamp(15px,3.4vw,20px);font-weight:600;letter-spacing:.18em;">{LOCK_LABEL_L}</strong>'
             f'<small style="display:block;color:#ad8f88;font-size:9px;letter-spacing:.13em;line-height:1.5;">{note_group}</small>'
             f'</div>'
@@ -336,6 +354,7 @@ def main():
     # separately to the head-card and the footer, with body+wheel floating
     # unframed and unconstrained in between.
     shell_css = '''
+''' + FONT_IMPORT + '''
 .rt-scope, .rt-scope * { box-sizing: border-box; }
 .rt-scope {
   display: block;
@@ -622,17 +641,17 @@ def main():
         '<i class="rt-title-flag" style="display:none">$7</i>'
         '<div class="rt-shell">'
         f'{shell_corners}'
-        '<div class="rt-header"><div class="rt-kicker">$2 · $1</div><h1>$7</h1><div class="rt-subtitle">$8</div><div class="rt-title-rule"><i></i><span>❦</span><i></i></div></div>'
+        f'<div class="rt-header"><div class="rt-kicker" style="font-family:{CURSIVE_MIXED};">$2 · $1</div><h1>$7</h1><div class="rt-subtitle">$8</div><div class="rt-title-rule"><i></i><span>❦</span><i></i></div></div>'
         '<p class="rt-synopsis">$9</p>'
         '<div class="rt-frame rt-frame-head" style="width:min(100%,420px);margin:14px auto 18px;padding:16px 21px 17px;">'
         f'{frame_corners}'
         '<div style="display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.16em;text-overflow:ellipsis;white-space:nowrap;">FOCUS · $1</div>'
-        '<div style="color:#d4b07b;font:italic 600 13px/1 \'Cormorant Garamond\',serif;letter-spacing:.08em;white-space:nowrap;">$2</div></div>'
+        f'<div style="min-width:0;overflow:hidden;color:#f0ddc3;font-size:15px;font-weight:600;letter-spacing:.1em;text-overflow:ellipsis;white-space:nowrap;font-family:{CURSIVE_MIXED};">Focus · $1</div>'
+        f'<div style="color:#d4b07b;font:600 18px/1 {CURSIVE};letter-spacing:.04em;white-space:nowrap;">$2</div></div>'
         '<div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:10px 20px;padding:13px 0 12px;border-bottom:1px solid rgba(189,145,89,.22);">'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">TIME</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$3</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">LOCATION</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
-        '<div style="min-width:0;"><div style="margin-bottom:5px;color:#a99287;font-size:9px;letter-spacing:.18em;text-transform:uppercase;">WEATHER</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
+        f'<div style="min-width:0;"><div style="margin-bottom:3px;color:#c7a875;font-size:13px;letter-spacing:.04em;font-family:{CURSIVE};">Time</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$3</div></div>'
+        f'<div style="min-width:0;"><div style="margin-bottom:3px;color:#c7a875;font-size:13px;letter-spacing:.04em;font-family:{CURSIVE};">Location</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$4</div></div>'
+        f'<div style="min-width:0;"><div style="margin-bottom:3px;color:#c7a875;font-size:13px;letter-spacing:.04em;font-family:{CURSIVE};">Weather</div><div style="position:relative;padding-left:11px;overflow:hidden;color:#dec29d;font-size:12px;letter-spacing:.06em;text-overflow:ellipsis;white-space:nowrap;"><span style="position:absolute;left:0;top:1px;color:#99754d;font-size:7px;">◆</span>$5</div></div></div>'
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:9px;padding-top:12px;color:#bfaea1;font-size:11px;line-height:1.75;letter-spacing:.06em;"><span style="color:#c99c5f;font-size:9px;line-height:1.9;">❖</span><span>$6</span></div></div>'
     )
 
@@ -710,27 +729,27 @@ def main():
 {frame_corners}
 <details class="rt-footer-details" open>
 <summary style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:15px;padding-bottom:13px;border-bottom:1px solid rgba(189,145,89,.22);color:#a99287;font-size:10px;letter-spacing:.13em;">
-<span>$21</span><span style="color:#d4b07b;font:italic 600 15px/1 'Cormorant Garamond',serif;letter-spacing:.08em;">$22</span><span style="text-align:right;">$23</span>
+<span>$21</span><span style="color:#d4b07b;font:600 18px/1 {CURSIVE};letter-spacing:.04em;">$22</span><span style="text-align:right;">$23</span>
 </summary>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:14px 0 13px;">
 <div class="rt-status-line stat-m" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">馬提亞斯</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{MVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{MVAL}</span></div>
 <div class="rt-status-line stat-t" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">阿霆</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{TVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{TVAL}</span></div>
 <div class="rt-status-line stat-l" style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">Lia</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:{LVAL}%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">{LVAL}</span></div>
-<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#bca79a;font-size:10px;letter-spacing:.14em;text-overflow:ellipsis;white-space:nowrap;">HEAT</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$42%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$42</span></div>
+<div style="display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:9px;min-width:0;"><span style="overflow:hidden;color:#c7a875;font-size:13px;letter-spacing:.04em;text-overflow:ellipsis;white-space:nowrap;font-family:{CURSIVE};">Heat</span><span style="position:relative;height:5px;border-top:1px solid #745160;border-bottom:1px solid rgba(197,154,91,.35);"><i style="position:absolute;top:-1px;left:0;height:2px;width:$42%;background:linear-gradient(90deg,#7e3f58,#d1a265,#f2d09e);box-shadow:0 0 7px rgba(209,162,101,.35);"></i></span><span style="color:#d7bb91;font:600 11px/1 'Cormorant Garamond',serif;">$42</span></div>
 </div>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
-<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">YOU</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$43</span></div>
+<div class="rt-wear-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:13px;letter-spacing:.04em;white-space:nowrap;font-family:{CURSIVE};">You</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">◇</span>$43</span></div>
 <div class="rt-wear-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$44</span></div>
 <div class="rt-wear-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$45</span></div>
 <div class="rt-wear-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">◇</span>$46</span></div>
 </div>
 <div style="display:grid;grid-template-columns:1fr;gap:9px;padding:13px 0 12px;border-top:1px solid rgba(189,145,89,.22);">
-<div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:9px;letter-spacing:.14em;white-space:nowrap;">YOU</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$47</span></div>
+<div class="rt-pose-row you" style="display:grid;grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#e4c9a4;font-size:13px;letter-spacing:.04em;white-space:nowrap;font-family:{CURSIVE};">You</span><span style="position:relative;padding-left:10px;color:#e4c9a4;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#c99c5f;font-size:7px;">✦</span>$47</span></div>
 <div class="rt-pose-row stat-m" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">馬提亞斯</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$48</span></div>
 <div class="rt-pose-row stat-t" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">阿霆</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$49</span></div>
 <div class="rt-pose-row stat-l" style="grid-template-columns:52px 1fr;align-items:baseline;gap:9px;min-width:0;"><span style="color:#a99287;font-size:9px;letter-spacing:.14em;white-space:nowrap;">Lia</span><span style="position:relative;padding-left:10px;color:#cbb9aa;font-size:10.5px;letter-spacing:.04em;line-height:1.5;"><span style="position:absolute;left:0;top:0;color:#8a6a45;font-size:7px;">✦</span>$50</span></div>
 </div>
-<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div class="rt-voice-row stat-m" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$51</div><div class="rt-voice-row stat-t" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$52</div><div class="rt-voice-row stat-l" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;">SECRET: </b>$53</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$54</div></div></div>
+<div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:15px;padding-top:12px;border-top:1px solid rgba(189,145,89,.22);"><span style="position:relative;display:block;width:31px;height:31px;border-radius:50%;overflow:hidden;border:1px solid #8d584d;box-shadow:inset 0 0 0 3px #27151e;background:#3c1c2a;"><span class="rt-seal rt-seal-m"><img src="data:image/jpeg;base64,{AVATAR["m"]}" alt=""></span><span class="rt-seal rt-seal-t"><img src="data:image/jpeg;base64,{AVATAR["t"]}" alt=""></span><span class="rt-seal rt-seal-l"><img src="data:image/jpeg;base64,{AVATAR["l"]}" alt=""></span></span><div style="min-width:0;"><div class="rt-voice-row stat-m" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;font-size:14px;font-family:{CURSIVE};">Secret: </b>$51</div><div class="rt-voice-row stat-t" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;font-size:14px;font-family:{CURSIVE};">Secret: </b>$52</div><div class="rt-voice-row stat-l" style="color:#bfaea1;font-size:11px;line-height:1.7;letter-spacing:.06em;"><b style="color:#dec29d;font-weight:500;font-size:14px;font-family:{CURSIVE};">Secret: </b>$53</div><div style="margin-top:6px;text-align:right;color:#d4b07b;font-size:11px;font-weight:500;letter-spacing:.08em;">$54</div></div></div>
 </details>
 </footer>'''
 

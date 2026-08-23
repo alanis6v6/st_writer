@@ -128,6 +128,39 @@
       的 `<Output_Format>` 已同步更新，五個開局檔案與 `mes_example` 也都已
       補上三個欄位。
 
+- [x] ⚠️ 這一輪修改：頭卡／花冠／尾卡殘留的德語、義語風格詞（`CHAPTER: Kapitel`、
+      `ROMAN: Akt`／`Atto`、`ACT` 欄位的 `Mitternacht`／`Notte di pioggia`／
+      `Giovinezza`／`Flucht`／`Kontrollverlust`／`Spätabend`）全部改成英文
+      （`Chapter`／`Act`／`Midnight`／`Night of Rain`／`Youth`／`Flight`／
+      `Losing Control`／`Late Evening`）。這只動卡片結構性的裝飾詞，跟馬提亞斯
+      本人失控時說德語（`system_prompt.md` 的 `<Language_Rules>`）是兩件事，
+      沒有動到他的角色特徵。
+- [x] ⚠️ 這一輪修改：所有卡片結構文字裡的英文，改用透過 Google Fonts `@import`
+      載入的花體／手寫風格字型（Parisienne，失敗時退回 Cormorant Garamond→
+      通用 serif），套用在 kicker、CHAPTER 徽章、Focus 行、Time／Location／
+      Weather／Heat／You／Secret 標籤、花冠的 Act 羅馬數字、尾卡 ACT 欄位這些
+      純英文或中英混排的區塊；中文敘事內容（地點、天氣、衣著、心事等實際
+      內容）完全不受影響——花體字沒有中文字形，會自動 fallback 回原本的中文
+      serif 字體，不需要另外拆 span。原本 9px 的英文標籤同步微調到 13px 左右，
+      抵銷花體字在小字級下辨識度變差的問題。
+- [x] ⚠️ 這一輪修改：旁白提及陸昀霆一律改用「昀霆」，不再用「阿霆」——
+      「阿霆」保留給對話台詞裡角色互相稱呼時使用（例如玩家喊「阿霆……慢一點」）。
+      `system_prompt.md` 新增明確規則（`<Language_Rules>`），五個開局檔案裡
+      [HEAD]/[BODY] 範圍內的旁白敘述、FOCUS／SYNOPSIS 欄位已全數改過，
+      只有真的在引號內被稱呼的地方維持「阿霆」。開局／設計筆記等不會進卡片
+      的作者備註部分不動。
+- [x] ⚠️ 這一輪修改：馬提亞斯「失控（V）／坦白（VI）」階段的角色詮釋正式收編
+      進設計——過去只寫「他維持理智表象下的內在撕裂」，導致實機演繹時他會
+      自然演出偏向主導、強勢的 soft dom 質地，但沒有被明文承認，屬於未定義
+      行為。已在 `<Narrative_Engine>` 新增第 7 點、`<Phases>` 表格的失控／坦白
+      兩列描述、`<Characters>` 馬提亞斯段落、`assemble_card.py` 的 `personality`
+      四處同步補上：戒備～試探（I～IV）維持原本壓抑內斂的形象；失控（V）之後
+      明確轉為「溫柔卻主導」——語氣放低、用引導式短句帶節奏，但「去武裝化」
+      對「掠奪、掌控、霸道、強制」等詞彙的封殺不分階段繼續生效，他的主導感
+      永遠建立在持續確認玩家意願之上，一旦玩家遲疑就會立刻放手。開局一
+      （`01_three.md`，馬提亞斯已在失控階段）原本的演出本來就貼合這個方向，
+      不需要改內文。
+
 ### 收尾
 - [x] 組裝成單一 `chara_card_v3` JSON：`gender_is_not_the_limit.json`
       （產生腳本 `assemble_card.py`，讀 system_prompt.md／worldbook.md／
