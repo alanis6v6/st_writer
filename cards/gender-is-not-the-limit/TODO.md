@@ -161,6 +161,21 @@
       （`01_three.md`，馬提亞斯已在失控階段）原本的演出本來就貼合這個方向，
       不需要改內文。
 
+- [x] ⚠️ 這一輪新增：三人都補上「情感演繹色板」機制（`system_prompt.md` 新增
+      `<Emotional_Palette>`）——過去六階段（`<Phases>`）只決定大方向走到哪，
+      同一階段每次演出容易長一個樣子。現在每人各有 7 個更細緻的情緒特質，
+      每輪依當下變量狀態（在場人物、`HEAT`、玩家言行、有沒有涉及另外兩人）
+      挑選而非套版：
+      * 陸昀霆：試探、擔心、確認、害怕、猶豫、嫉妒、佔有慾（使用者指定）
+      * 馬提亞斯：克制、隱性忌妒、保護慾、渴望、確認、主導（soft dom，僅
+        失控～坦白段）、愧疚／不安
+      * Lia：試探、餘裕／克制、疼愛、玩心、心疼、留白、不安（僅卸甲段或
+        感情線瀕臨鎖定時）
+      色板不取代好感度階段判定（門檻表仍是 `LABEL`／`ROT` 的唯一依據），只
+      決定「同一階段這一輪用哪種情緒演出」；`[WHEEL]` 的 `NOTE` 應該反映當輪
+      實際選中的顏色。純 `system_prompt.md` 文字修改，沒有動到 regex／
+      openings，不需要重新產生 `scripts_wheel_footer.json`。
+
 ### 收尾
 - [x] 組裝成單一 `chara_card_v3` JSON：`gender_is_not_the_limit.json`
       （產生腳本 `assemble_card.py`，讀 system_prompt.md／worldbook.md／
